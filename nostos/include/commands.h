@@ -25,7 +25,7 @@
 #define COMMAND_OK_MESSAGE "Command OK\n"
 #define UNKNOWN_COMMAND_MESSAGE "Unknown command\n"
 
-/* Recommended usage strings (guide section 11.2). ACCEPT/BUY/MAP are
+/* Usage strings. ACCEPT/BUY/MAP are
  * fixed by the official test sheet; the others follow the same style
  * for consistency and are not additional golden strings. */
 #define USAGE_CONNECT "Usage: CONNECT ITHACA\n"

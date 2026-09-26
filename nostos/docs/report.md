@@ -42,7 +42,7 @@ Every aggregate (`tOdysseusConfig`, `tIthacaConfig`, `tVoyageList`, `tIslandConf
 `tRouteList`, `tStockList`) is a small typed struct plus a manually grown dynamic array
 (count/capacity, `realloc` through a temporary pointer) — never a fixed-size buffer sized
 to today's fixtures (24 voyages, 8 products, 5 candidate routes). This was a deliberate
-choice: the guide and the statement both warn against hardcoding fixture-derived
+choice: the design avoids hardcoding fixture-derived
 constants, and a bigger `voyages.dat` or a stock file with more/fewer products must
 change the program's behavior, not just its printed numbers. See `docs/design.md`
 section 2 for the full ownership table (who allocates what, who frees it, and when).
@@ -166,5 +166,4 @@ poem.
   `strtol`/`strtok_r`, `sigaction`/`signalfd`/`poll`, EINTR/short-read handling.
 - `All Materials/Codeing samples/` — File Descriptors, Signals, and Select sample
   groups, used as the taught methodology (with their deliberate simplifications/races
-  not carried over — see `PHASE1_IMPLEMENTATION_GUIDE.md` section 1.4 for the explicit
-  per-file lesson/limitation mapping).
+  not carried over).

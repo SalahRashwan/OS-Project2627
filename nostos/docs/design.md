@@ -52,8 +52,8 @@ into three files would triplicate the shared endpoint/line helpers without addin
 distinct responsibility. `routes.c` is kept separate from `config.c` because it has a
 genuinely distinct responsibility (the Sphragis ownership adapter, Section 4 below) with
 its own nontrivial invariants. Each loader function individually stays within the 45-line
-limit; splitting further would produce artificial `partN` helpers the guide explicitly
-warns against.
+limit; splitting further would produce artificial `partN` helpers that would only
+hurt readability.
 
 `Odysseus.h`/`Ithaca.h`/`Island.h` are kept intentionally small (an `@Purpose` comment and,
 where useful, a `printUsage()` declaration for that binary's own CLI message) rather than
@@ -77,7 +77,7 @@ empty placeholders, since each entry-point file only exposes `main()`.
 | `tParsedCommand` | `eKind`, `psArg1` (owned, may be NULL), `lNumber`, `nHasNumber` | one terminal iteration; destroyed immediately after the result is printed |
 | `tUsageMessage` | up to 2 **borrowed** `const char *` literals + count | one terminal iteration; nothing to free (string literals) |
 
-Ownership rules applied uniformly (guide Section 5.2):
+Ownership rules applied uniformly:
 
 1. Every `init*`/loader zeroes/NULLs all pointers and sets counts to 0, descriptors to -1,
    *before* any fallible operation, so a `destroy*` call is always safe even after a
@@ -151,8 +151,8 @@ invalid *island name* is still caught even when the routes section is empty.
 `parseCommand()` is pure: it takes one already-dequeued line (no trailing `\n`), tokenizes
 it, classifies the first token against the eleven verbs case-insensitively via exact
 `strcasecmp` (never a prefix match, so `MAPS`/`ACCEPTED`/`BUYER` fall through to
-`Unknown command`), validates arity/second-word/numeric fields per the table in
-`PHASE1_IMPLEMENTATION_GUIDE.md` Section 11.2, and returns one of
+`Unknown command`), validates arity/second-word/numeric fields per the statement and the official test sheet,
+and returns one of
 `PARSE_OK` / `PARSE_UNKNOWN` / `PARSE_USAGE` / `PARSE_EMPTY`, or `PARSE_ERROR` when one of
 its own allocations fails (reported by `Odysseus.c` as a resource error on stderr, never
 as `Unknown command`; `PARSE_UNKNOWN` is reserved for an unrecognized verb). It never touches a file

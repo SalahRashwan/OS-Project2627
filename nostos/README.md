@@ -4,7 +4,7 @@ A course-compliant Phase 1 implementation of the Nostos System (OS 2026-27), cov
 Odysseus, Ithaca, and Island process startup, configuration/data loading, mandatory
 Sphragis route filtering, and a syntax-only interactive command parser. No sockets,
 concurrency mechanisms, trading, or persistence are implemented — see
-`docs/assumptions.md` and `PHASE1_IMPLEMENTATION_GUIDE.md` for the full scope rationale.
+`docs/assumptions.md` for the full scope rationale.
 
 ## Prerequisites
 
@@ -146,5 +146,4 @@ newline is either executed or reported, never dropped.
 
 No sockets, `bind`/`listen`/`accept`/`connect`, forks, threads, IPC objects, market
 transactions, real map rendering, food timers, mission-state mutation, file transfers,
-or glyph signing/checking — all excluded by the Phase 1 scope. See
-`PHASE1_IMPLEMENTATION_GUIDE.md` section 2.2 for the complete exclusion list.
+or glyph signing/checking — all excluded by the Phase 1 scope.

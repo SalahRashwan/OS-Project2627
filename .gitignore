@@ -8,6 +8,3 @@ nostos/tests/loader_check
 nostos/tests/bin/
 nostos/tests/fault-logs/
 
-# Local assistant context files
-CLAUDE.md
-**/CLAUDE.md
