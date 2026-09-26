@@ -164,7 +164,7 @@ int filterIslandRoutes(const char *psIslandName, const tRouteList *pstRawRoutes,
     stIsland.known_island_count = nRawCount;
     nLibraryResult = SPHRAGIS_filter_island_configuration(&stIsland);
     if (0 > nLibraryResult) {
-        /* Assumption A19: the header does not document whether the
+        /* The header does not document whether the
          * array is mutated on an error return, so free defensively. */
         freeTempNames(appsTempNames, nRawCount);
         return nLibraryResult;

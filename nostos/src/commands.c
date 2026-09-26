@@ -65,7 +65,7 @@ static eParseStatus classifyConnect(char **appsTokens, int nTokenCount, tParsedC
 /***********************************************
  * @Name: classifyList
  * @Def: Validates "LIST VOYAGES" / "LIST MARKET"; a missing or
- *       unrecognized subcommand shows both usages (assumption A09).
+ *       unrecognized subcommand shows both usages.
  * @Arg: In: appsTokens = borrowed line tokens.
  *       In: nTokenCount = number of tokens.
  *       Out: pstCommand = receives the kind on success.
@@ -104,7 +104,7 @@ static eParseStatus classifyList(char **appsTokens, int nTokenCount, tParsedComm
 /***********************************************
  * @Name: classifyAccept
  * @Def: Validates "ACCEPT <voyage_id>": one digit-only token, bounded
- *       to [1, INT_MAX] (assumptions A05, A17). No voyage-list lookup.
+ *       to [1, INT_MAX]. No voyage-list lookup.
  * @Arg: In: appsTokens = borrowed line tokens.
  *       In: nTokenCount = number of tokens.
  *       Out: pstCommand = receives kind and identifier on success.
@@ -157,8 +157,8 @@ static eParseStatus classifySail(char **appsTokens, int nTokenCount, tParsedComm
  * @Name: classifyBuySell
  * @Def: Validates "BUY/SELL <product> <amount>": nonempty product,
  *       positive digit-only amount. For BUY specifically, a literal
- *       "MAP" product must carry amount 1 (assumption A06); SELL has
- *       no such restriction (assumption A07).
+ *       "MAP" product must carry amount 1; SELL has
+ *       no such restriction.
  * @Arg: In: appsTokens = borrowed line tokens.
  *       In: nTokenCount = number of tokens.
  *       In: eKind = CMD_BUY or CMD_SELL.

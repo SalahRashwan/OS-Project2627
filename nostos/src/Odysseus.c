@@ -78,7 +78,7 @@ static int printPrompt(void) {
  * @Name: printParseResult
  * @Def: Writes exactly the lines required for one parse result:
  *       Command OK, Unknown command, one or two usage lines, or nothing
- *       for a blank line (assumption A08).
+ *       for a blank line.
  * @Arg: In: eStatus = parser result other than PARSE_ERROR.
  *       In: pstUsage = usage lines, read only for PARSE_USAGE.
  * @Ret: NOSTOS_OK if every required byte was written, NOSTOS_ERROR
@@ -292,8 +292,7 @@ static int runOdysseusTerminal(int nSigFd) {
  * @Name: main
  * @Def: Entry point. Validates the CLI argument count, initializes,
  *       prints the readiness message, runs the terminal, releases every
- *       owned resource, and returns the documented exit status
- *       (assumption A21).
+ *       owned resource, and returns the exit status
  * @Arg: In: argc = argument count.
  *       In: argv = argument vector; argv[1] = odysseus.dat path.
  * @Ret: NOSTOS_EXIT_OK on CTRL+C/EOF, NOSTOS_EXIT_ARGS on a wrong

@@ -17,7 +17,7 @@
 #define NOSTOS_OK 0
 #define NOSTOS_ERROR (-1)
 
-/* Process exit-status convention (assumption A21; not an official
+/* Process exit-status convention (our own choice, not an official
  * requirement, but documented and used consistently by all three
  * entry points). */
 #define NOSTOS_EXIT_OK 0

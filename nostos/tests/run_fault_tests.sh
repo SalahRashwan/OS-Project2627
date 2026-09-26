@@ -1,6 +1,6 @@
 #!/bin/sh
 # @File: run_fault_tests.sh
-# @Purpose: Regression suite for audit findings F1-F4. Uses the test-only
+# @Purpose: Error-path test suite. Uses the test-only
 #           fault-injection builds (tests/bin/*-fault, see
 #           tests/fault_inject.c) to fail, one at a time, EVERY counted
 #           allocation call (malloc/realloc/vasprintf) of each program,
@@ -192,19 +192,19 @@ printf 'BUY DriedFish 3\nSTATUS' >"$WORK/buy_status_eof"
 head -n 6 configs/aeaea.dat >"$WORK/bad_second_route.dat"
 echo "broken" >>"$WORK/bad_second_route.dat"
 
-echo "=== F2/F3: Odysseus parser and EOF allocation failures ==="
+echo "=== Odysseus parser and EOF allocation failures ==="
 sweep ody_map_nl "" "$WORK/map_nl" "Command OK" 1 $BIN/odysseus-fault configs/odysseus.dat
 sweep ody_map_eof "" "$WORK/map_eof" "Command OK" 1 $BIN/odysseus-fault configs/odysseus.dat
 sweep ody_sail "" "$WORK/sail_nl" "Command OK" 1 $BIN/odysseus-fault configs/odysseus.dat
 sweep ody_buy_status_eof "" "$WORK/buy_status_eof" "Command OK" 2 $BIN/odysseus-fault configs/odysseus.dat
 
-echo "=== F1: Island allocation failures (valid config, all routes) ==="
+echo "=== Island allocation failures (valid config, all routes) ==="
 sweep island_aeaea "products available." "$WORK/empty" "closes its port." 1 \
     $BIN/island-fault configs/aeaea.dat data/stocks/Aeaea.db
 sweep island_scheria "products available." "$WORK/empty" "closes its port." 1 \
     $BIN/island-fault configs/scheria.dat data/stocks/Scheria.db
 
-echo "=== F1: Island malformed route after a stored route ==="
+echo "=== Island malformed route after a stored route ==="
 run_case island_bad_second_route "" "$WORK/empty" $BIN/island-fault "$WORK/bad_second_route.dat" data/stocks/Aeaea.db
 if [ "$STATUS" = "2" ]; then check_case island_bad_second_route "never" 0; else fail island_bad_second_route "status $STATUS"; fi
 
@@ -212,7 +212,7 @@ echo "=== Ithaca allocation failures ==="
 sweep ithaca "Waiting for Odysseus..." "$WORK/empty" "Ithaca closes the harbor." 1 \
     $BIN/ithaca-fault configs/ithaca.dat data/voyages.dat
 
-echo "=== F4: stdout write failures ==="
+echo "=== stdout write failures ==="
 printf 'MAP\nSTATUS\n' >"$WORK/two_cmds"
 write_sweep ody_output 6 "" "$WORK/two_cmds" "Command OK" 2 $BIN/odysseus-fault configs/odysseus.dat
 write_sweep ithaca_output 3 "Waiting for Odysseus..." "$WORK/empty" "never" 0 \

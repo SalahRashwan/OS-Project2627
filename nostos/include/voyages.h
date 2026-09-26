@@ -5,7 +5,7 @@
  * @File: voyages.h
  * @Purpose: Loader and destructor for Ithaca's voyages.dat file. IDs are
  *           not present on disk; they are assigned internally in file
- *           order starting at 1 (assumption A04).
+ *           order starting at 1.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
  * @Date: 2026-09-21
  */

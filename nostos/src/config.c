@@ -629,7 +629,7 @@ int routeListAppend(tRouteList *pstList, char *psDestination, char *psIp, int nP
  * @Name: routeListHasDestination
  * @Def: Case-insensitively checks whether a destination name is
  *       already present, defending against a malformed duplicate
- *       route entry silently losing an endpoint (assumption A18).
+ *       route entry silently losing an endpoint.
  * @Arg: In: pstList = list to search.
  *       In: psName = destination name to look for.
  * @Ret: 1 if present, 0 otherwise.

@@ -7,8 +7,8 @@
  *           block SIGINT before any resource is acquired, wait for it
  *           through a signalfd descriptor inside an ordinary blocking
  *           poll(), and consume it without ever running signal-handler
- *           code (there is no handler at all). See docs/design.md
- *           section 6 and the UNIX book section 12.6.
+ *           code (there is no handler at all). See the UNIX book
+ *           section 12.6.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
  * @Date: 2026-09-21
  */

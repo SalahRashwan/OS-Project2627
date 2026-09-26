@@ -142,7 +142,7 @@ expect accept_absent_id 'ACCEPT 999\n' "Command OK"
 expect sail_unknown_island 'SAIL Atlantis\n' "Command OK"
 expect buy_unknown_product 'BUY UnknownProduct 3\n' "Command OK"
 
-echo "=== Map special form (assumptions A06/A07) ==="
+echo "=== Map special form ==="
 expect buy_map_1 'BUY MAP 1\n' "Command OK"
 expect buy_map_2 'BUY MAP 2\n' "Usage: BUY <product> <amount>"
 expect sell_map_1 'SELL MAP 1\n' "Command OK"
@@ -298,8 +298,8 @@ compare odysseus_fields
 } >"$WORK/expected"
 compare ithaca_fields
 
-# Survivor counts observed from the real Sphragis library and confirmed
-# independently in PHASE1_AUDIT_RESULTS.md section 3 (test data only).
+# Survivor counts observed from the real Sphragis library for the included
+# configuration files (expected values for the tests only).
 expected_survivors() {
     case "$1" in
         Aeaea) echo 2 ;; Aeolia) echo 1 ;; Ismarus) echo 1 ;;

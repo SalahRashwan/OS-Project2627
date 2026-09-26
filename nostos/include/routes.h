@@ -6,8 +6,7 @@
  * @Purpose: The Sphragis ownership adapter: turns a raw, unvalidated
  *           route list into the real library-validated valid route
  *           list, preserving IP/port endpoints the library itself does
- *           not track. See docs/design.md section 4 for the full
- *           ownership walkthrough.
+ *           not track.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
  * @Date: 2026-09-21
  */

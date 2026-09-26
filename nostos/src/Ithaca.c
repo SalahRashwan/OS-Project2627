@@ -98,8 +98,7 @@ static int runIthacaLifecycle(int nSigFd, tIthacaConfig *pstConfig, tVoyageList 
 /***********************************************
  * @Name: main
  * @Def: Entry point. Validates the CLI argument count, initializes,
- *       runs the lifecycle, and returns the documented exit status
- *       (assumption A21).
+ *       runs the lifecycle, and returns the exit status
  * @Arg: In: argc = argument count.
  *       In: argv[1] = config.dat path, argv[2] = voyages.dat path.
  * @Ret: NOSTOS_EXIT_OK after a clean CTRL+C shutdown, NOSTOS_EXIT_ARGS on
