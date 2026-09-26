@@ -18,7 +18,8 @@ concurrency mechanisms, trading, or persistence are implemented — see
 
 ```sh
 make            # builds odysseus, ithaca, island (default target)
-make clean      # removes only generated build/ objects and the three executables
+make clean      # removes generated objects, the three executables, test binaries/logs
+make package GROUP=<n>   # creates G<n>_F1.tar (the real group number must be given)
 ```
 
 `island` is the only executable linked against the real `lib/sphragis.o`. A clean build
@@ -91,24 +92,39 @@ Type `CTRL+D` (EOF) or `CTRL+C` at any point to exit Odysseus cleanly.
 ## Tests
 
 ```sh
-make test        # tests/run_functional_tests.sh — 60 reproducible checks (currently
-                  # all passing; see docs/test-results.md for the actual run log)
-make memcheck     # tests/run_memcheck.sh — Valgrind over the CTRL+C and representative
-                  # failure paths of all three executables
+make test      # style scan (tests/style_check.py) + tests/run_functional_tests.sh:
+               # every command case, EOF/CRLF handling, exit statuses, SIGINT shutdown
+               # of all programs, and field-by-field loader comparisons
+make faults    # tests/run_fault_tests.sh: fails every allocation call and stdout
+               # write, one at a time, under Valgrind (FAULT_VALGRIND=0 = faster)
+make memcheck  # tests/run_memcheck.sh: Valgrind over SIGINT (Odysseus with stdin
+               # held open), EOF, and initialization-failure paths
+make check     # all three
 ```
 
-`tests/loader_check.c` is a small **test-only** diagnostic (not part of `make all`) that
-links the real loaders and dumps every loaded field, used by `run_functional_tests.sh`
-to prove field-level storage (not just startup messages). It intentionally uses
-`printf`/`fprintf` because it is a verification harness, never delivered as part of the
-graded `odysseus`/`ithaca`/`island` binaries — see its file header and
-`docs/test-results.md` for why it is exempt from the forbidden-API audit. Build it with:
+All test programs are rebuilt from the current sources by these targets. A missing
+component is reported as a failure, never a silent skip; the Valgrind-based suites exit
+with status 77 and the words `NOT RUN` if Valgrind is not installed.
 
-```sh
-gcc -D_GNU_SOURCE -Iinclude -Ilib -std=gnu11 -Wall -Wextra -g \
-    -o tests/loader_check tests/loader_check.c \
-    src/config.c src/text.c src/io.c src/voyages.c src/stock.c src/routes.c lib/sphragis.o
-```
+Test-only helpers (never linked into `odysseus`/`ithaca`/`island`):
+
+- `tests/loader_check.c` links the real loaders and the real Sphragis adapter and prints
+  every loaded field; the functional suite compares that output with values decoded
+  independently from the input files (awk for text, `od` for the binary stock). It
+  follows the same descriptor-only I/O and style rules as the runtime code.
+- `tests/fault_inject.c` provides linker wrappers (`-Wl,--wrap=...`) used only by the
+  `tests/bin/*-fault` builds to make one chosen allocation or stdout write fail.
+- `tests/style_check.py` checks the mechanically checkable style rules (definition
+  headers with argument meanings, 45-line limit, include placement, prefixes,
+  constant-first comparisons, prohibited calls). It does not replace human review.
+
+## Error handling
+
+Every allocation, read, and write result is checked. On a failure the program prints
+a fixed diagnostic line on stderr (no allocation is needed to report an allocation
+failure), releases everything it owns, and exits with status 2. A parser allocation
+failure is never reported as `Unknown command`, and a final command without a trailing
+newline is either executed or reported, never dropped.
 
 ## Documentation
 

@@ -7,7 +7,7 @@
  *           at which point it releases every owned resource and
  *           exits. Ithaca has no interactive terminal (P p.17).
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
 
 #include "Ithaca.h"
@@ -18,9 +18,13 @@
  *       configuration and voyage list in that order. Each stage
  *       releases only what it itself acquired on failure; loaders are
  *       self-cleaning on their own failure.
- * @Arg: In: psConfigPath, psVoyagesPath.
- *       Out: pnSigFd, pstConfig, pstVoyages.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: psConfigPath = path to ithaca.dat.
+ *       In: psVoyagesPath = path to voyages.dat.
+ *       Out: pnSigFd = open signalfd on success.
+ *       Out: pstConfig = loaded configuration on success.
+ *       Out: pstVoyages = loaded voyage list on success.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR otherwise (nothing is left
+ *       allocated or open).
  ***********************************************/
 static int initializeIthaca(const char *psConfigPath, const char *psVoyagesPath, int *pnSigFd,
                              tIthacaConfig *pstConfig, tVoyageList *pstVoyages) {
@@ -35,11 +39,13 @@ static int initializeIthaca(const char *psConfigPath, const char *psVoyagesPath,
     }
     if (NOSTOS_OK != loadIthacaConfig(psConfigPath, pstConfig)) {
         close(*pnSigFd);
+        *pnSigFd = -1;
         return NOSTOS_ERROR;
     }
     if (NOSTOS_OK != loadVoyages(psVoyagesPath, pstVoyages)) {
         destroyIthacaConfig(pstConfig);
         close(*pnSigFd);
+        *pnSigFd = -1;
         return NOSTOS_ERROR;
     }
     return NOSTOS_OK;
@@ -49,8 +55,8 @@ static int initializeIthaca(const char *psConfigPath, const char *psVoyagesPath,
  * @Name: announceIthacaReady
  * @Def: Prints the required startup messages with the actual loaded
  *       voyage count (never a hardcoded fixture count).
- * @Arg: In: pstVoyages.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: pstVoyages = loaded voyage list (count is printed).
+ * @Ret: NOSTOS_OK if both lines were written, NOSTOS_ERROR otherwise.
  ***********************************************/
 static int announceIthacaReady(const tVoyageList *pstVoyages) {
     if (NOSTOS_OK != writeFormatted(STDOUT_FILENO, "Ithaca initialized. %d voyages loaded.\n", pstVoyages->nCount)) {
@@ -63,19 +69,25 @@ static int announceIthacaReady(const tVoyageList *pstVoyages) {
  * @Name: runIthacaLifecycle
  * @Def: Announces readiness, blocks until CTRL+C, prints the shutdown
  *       message, and releases every owned resource exactly once,
- *       regardless of which stage failed.
- * @Arg: In: nSigFd. In/Out: pstConfig, pstVoyages.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ *       regardless of which stage failed. Each failure is reported with
+ *       one fixed stderr literal (no allocation, no retry).
+ * @Arg: In: nSigFd = signalfd created during initialization; closed.
+ *       In/Out: pstConfig = configuration to release.
+ *       In/Out: pstVoyages = voyage list to release.
+ * @Ret: NOSTOS_OK after a clean CTRL+C shutdown, NOSTOS_ERROR if a
+ *       message could not be written or the signal wait failed.
  ***********************************************/
 static int runIthacaLifecycle(int nSigFd, tIthacaConfig *pstConfig, tVoyageList *pstVoyages) {
-    int nStatus = NOSTOS_OK;
+    int nStatus = NOSTOS_ERROR;
 
     if (NOSTOS_OK != announceIthacaReady(pstVoyages)) {
-        nStatus = NOSTOS_ERROR;
+        (void) writeString(STDERR_FILENO, ERROR_ITHACA_WRITE);
     } else if (NOSTOS_OK != waitForSignalOnly(nSigFd)) {
-        nStatus = NOSTOS_ERROR;
+        (void) writeString(STDERR_FILENO, ERROR_ITHACA_SIGNAL);
+    } else if (NOSTOS_OK != writeString(STDOUT_FILENO, "Ithaca closes the harbor.\n")) {
+        (void) writeString(STDERR_FILENO, ERROR_ITHACA_WRITE);
     } else {
-        writeString(STDOUT_FILENO, "Ithaca closes the harbor.\n");
+        nStatus = NOSTOS_OK;
     }
     destroyVoyageList(pstVoyages);
     destroyIthacaConfig(pstConfig);
@@ -90,7 +102,9 @@ static int runIthacaLifecycle(int nSigFd, tIthacaConfig *pstConfig, tVoyageList 
  *       (assumption A21).
  * @Arg: In: argc = argument count.
  *       In: argv[1] = config.dat path, argv[2] = voyages.dat path.
- * @Ret: NOSTOS_EXIT_OK / NOSTOS_EXIT_ARGS / NOSTOS_EXIT_IO.
+ * @Ret: NOSTOS_EXIT_OK after a clean CTRL+C shutdown, NOSTOS_EXIT_ARGS on
+ *       a wrong argument count, NOSTOS_EXIT_IO on any initialization,
+ *       I/O, or allocation failure.
  ***********************************************/
 int main(int argc, char *argv[]) {
     int nSigFd = -1;
@@ -98,11 +112,11 @@ int main(int argc, char *argv[]) {
     tVoyageList stVoyages;
 
     if (3 != argc) {
-        writeString(STDERR_FILENO, "Usage: ithaca <config.dat> <voyages.dat>\n");
+        (void) writeString(STDERR_FILENO, "Usage: ithaca <config.dat> <voyages.dat>\n");
         return NOSTOS_EXIT_ARGS;
     }
     if (NOSTOS_OK != initializeIthaca(argv[1], argv[2], &nSigFd, &stConfig, &stVoyages)) {
-        writeString(STDERR_FILENO, "Error: Ithaca failed to initialize.\n");
+        (void) writeString(STDERR_FILENO, "Error: Ithaca failed to initialize.\n");
         return NOSTOS_EXIT_IO;
     }
     if (NOSTOS_OK != runIthacaLifecycle(nSigFd, &stConfig, &stVoyages)) {

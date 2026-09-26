@@ -12,7 +12,12 @@
  * @Date: 2026-09-21
  */
 
-/* Own */
+/* System Includes */
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+
+/* Project Includes */
 #include "types.h"
 
 /***********************************************

@@ -6,7 +6,7 @@
 **Student:** Salah Ahmed Salaheldin Adly Rashwan
 **Group:** *pending — not established by this handoff; fill in before submission
 (assumption A15)*
-**Date:** 21 September 2026 (evolving document; update on every subsequent session)
+**Date:** 26 September 2026 (evolving document; first version 21 September 2026)
 
 This is a **progress report**, written for the Phase 1 partial delivery the statement
 requires (P PDF p.39). It describes exactly what was implemented, why, and what remains
@@ -94,6 +94,25 @@ section 2 for the full ownership table (who allocates what, who frees it, and wh
   before (and independent of) whatever partial line sits in the accumulator. Verified
   with a FIFO-driven test that sends a partial command, waits, then sends a real
   `SIGINT`.
+- **Independent audit (26 September 2026) and its corrections.** An external audit
+  (`PHASE1_AUDIT_RESULTS.md`) found that the ordinary tests only covered successful
+  allocations and writes. Injecting failures exposed four runtime defects: a double
+  free in the island route loader when a later route line failed after an earlier route
+  had been stored (F1); parser allocation failures printed as `Unknown command` (F2); an
+  allocation failure while extracting a final unterminated command silently dropped it
+  (F3); and failed terminal writes were ignored (F4). It also found style-guide gaps (F5)
+  and two weaknesses in our own tests: the Odysseus "SIGINT" memory test could really be
+  an EOF run (F6), and `make test` could run a stale or missing field checker (F7).
+  Solutions: each route line is now parsed into fresh, iteration-local strings that are
+  freed only by that iteration (`config.c: appendRawRouteLine`); the parser has a
+  separate `PARSE_ERROR` result; every terminal output and EOF step returns a status
+  that is propagated, reported with a fixed stderr message, and turned into exit 2 after
+  full cleanup; the style pass moved system includes into headers and completed every
+  definition header. The lesson was that "0 bytes leaked" in a normal run proves little
+  about error paths, so the tests now fail every allocation call and every stdout write
+  one at a time under Valgrind (`tests/run_fault_tests.sh`), and the same suite run
+  against the pre-correction code reproduces the audit's double free at the same
+  allocation indices.
 
 ## 6. Block diagram
 

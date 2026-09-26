@@ -22,4 +22,8 @@
 #include "io.h"
 #include "status.h"
 
+/* Fixed stderr diagnostics (literals: reporting needs no allocation). */
+#define ERROR_ITHACA_WRITE "Error: Ithaca could not write to standard output.\n"
+#define ERROR_ITHACA_SIGNAL "Error: Ithaca failed while waiting for CTRL+C.\n"
+
 #endif

@@ -5,14 +5,8 @@
  *           than read as a native struct, so no padding/alignment
  *           assumption about the compiler's struct layout is needed.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
-
-/* System */
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 /* Own */
 #include "stock.h"
@@ -22,7 +16,7 @@
 /***********************************************
  * @Name: initStockList
  * @Def: Resets a stock list to a safe, destroyable empty state.
- * @Arg: Out: pstList.
+ * @Arg: Out: pstList = list to reset (no allocation is freed).
  * @Ret: None.
  ***********************************************/
 static void initStockList(tStockList *pstList) {
@@ -33,7 +27,9 @@ static void initStockList(tStockList *pstList) {
 
 /***********************************************
  * @Name: destroyStockList
- * @Def: See stock.h.
+ * @Def: Frees the stock record array (records own no nested pointers).
+ * @Arg: In/Out: pstList = list to release.
+ * @Ret: None.
  ***********************************************/
 void destroyStockList(tStockList *pstList) {
     free(pstList->pstRecords);
@@ -42,13 +38,17 @@ void destroyStockList(tStockList *pstList) {
 
 /***********************************************
  * @Name: stockRecordNameToString
- * @Def: See stock.h.
+ * @Def: Produces a newly owned, guaranteed NUL-terminated copy of a
+ *       stock record's raw 100-byte name field, stopping at the first
+ *       embedded NUL if one is present within the field.
+ * @Arg: In: pstRecord = record whose name field is copied.
+ * @Ret: A newly owned string, or NULL on allocation failure.
  ***********************************************/
 char *stockRecordNameToString(const tStockRecord *pstRecord) {
     size_t nLen = 0;
     char *psCopy = NULL;
 
-    while (nLen < STOCK_NAME_SIZE && '\0' != pstRecord->sName[nLen]) {
+    while (STOCK_NAME_SIZE > nLen && '\0' != pstRecord->sName[nLen]) {
         nLen++;
     }
     psCopy = malloc(nLen + 1);
@@ -103,9 +103,9 @@ static int readFullRecord(int nFd, unsigned char *pRaw) {
     size_t nTotal = 0;
     ssize_t nRead = 0;
 
-    while (nTotal < STOCK_RECORD_SIZE) {
+    while (STOCK_RECORD_SIZE > nTotal) {
         nRead = safeRead(nFd, pRaw + nTotal, STOCK_RECORD_SIZE - nTotal);
-        if (nRead < 0) {
+        if (0 > nRead) {
             return NOSTOS_ERROR;
         }
         if (0 == nRead) {
@@ -124,10 +124,10 @@ static int readFullRecord(int nFd, unsigned char *pRaw) {
  * @Def: Appends one already-decoded record to a growable stock list.
  * @Arg: In/Out: pstList = list to grow.
  *       In: pstRecord = record to copy into the list.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int stockListAppend(tStockList *pstList, const tStockRecord *pstRecord) {
-    tStockRecord *pTemp = NULL;
+    tStockRecord *pstTemp = NULL;
     int nNewCapacity = 0;
 
     if (pstList->nCount == pstList->nCapacity) {
@@ -136,11 +136,11 @@ static int stockListAppend(tStockList *pstList, const tStockRecord *pstRecord) {
         } else {
             nNewCapacity = pstList->nCapacity * 2;
         }
-        pTemp = realloc(pstList->pstRecords, (size_t) nNewCapacity * sizeof(tStockRecord));
-        if (NULL == pTemp) {
+        pstTemp = realloc(pstList->pstRecords, (size_t) nNewCapacity * sizeof(tStockRecord));
+        if (NULL == pstTemp) {
             return NOSTOS_ERROR;
         }
-        pstList->pstRecords = pTemp;
+        pstList->pstRecords = pstTemp;
         pstList->nCapacity = nNewCapacity;
     }
     pstList->pstRecords[pstList->nCount] = *pstRecord;
@@ -150,7 +150,13 @@ static int stockListAppend(tStockList *pstList, const tStockRecord *pstRecord) {
 
 /***********************************************
  * @Name: loadStockList
- * @Def: See stock.h.
+ * @Def: Opens, decodes, and closes a binary stock.db file, reading
+ *       fixed-size records until a clean EOF. A partial final record
+ *       is reported as a truncated-file error, never counted as a
+ *       complete product.
+ * @Arg: In: psPath = path to the stock file.
+ *       Out: pstList = filled on success; safe to destroy on failure.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR otherwise.
  ***********************************************/
 int loadStockList(const char *psPath, tStockList *pstList) {
     int nFd = -1;

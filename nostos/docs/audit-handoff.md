@@ -1,52 +1,92 @@
-# Audit handoff — Nostos Phase 1
+# Audit handoff — Nostos Phase 1 (re-audit after corrections)
 
-Prepared for an independent reviewer (Codex). This document maps every guide
-requirement to real files/functions and to the actual evidence gathered in this
-session. It distinguishes what was verified from what remains pending; see
-`docs/test-results.md` for full logs/transcripts and `docs/assumptions.md` for every
-documented interpretation choice.
+Prepared for the independent reviewer. The first audit (`../../PHASE1_AUDIT_RESULTS.md`,
+26 September 2026) reviewed an earlier version of this directory. This document maps
+each of its findings to the correction made and the evidence produced, then gives the
+requirement mapping and the exact commands for re-checking. Results are recorded in
+`docs/test-results.md`; interpretation choices are in `docs/assumptions.md`.
 
-## 1. Implemented phase and explicit exclusions
+Everything marked "passed" below was run on WSL2 Ubuntu 24.04 (GCC 13.3.0,
+Valgrind 3.22.0). **Montserrat has not been used.** Nothing here claims instructor
+approval.
 
-Phase 1 only. No sockets, `bind`/`listen`/`accept`/`connect`, forks, threads, IPC
-objects (queues/shared memory/semaphores), trading, real map rendering, food timers,
-mission-state mutation, file transfers, glyph signing/checking, or persistence exist
-anywhere in `src/`/`include/`. Confirmed by source inspection (grep for
-`socket|fork|pthread|shmget|msgget|semget` across `src/*.c include/*.h` returns no
-matches) and by the fact that only `<unistd.h> <fcntl.h> <signal.h> <poll.h>
-<sys/signalfd.h> <stdarg.h> <stdlib.h> <string.h> <ctype.h> <errno.h> <limits.h>
-<stdint.h> <sys/types.h> <stddef.h>` plus the project's own headers are included
-anywhere.
+## 1. Response to the audit findings
 
-## 2. Requirement mapping (F01-F20)
+| Finding | Correction | Where | Regression evidence |
+| --- | --- | --- | --- |
+| **F1** (P1) double free of stored route strings after a later parse failure | Each route line is parsed into strings local to one call, initialized to `NULL` per line; every error branch frees only those. Ownership moves into the list only on a successful append. `loadIslandConfig` now closes/destroys through one cleanup path. | `src/config.c`: `appendRawRouteLine`, `loadIslandRawRoutes`, `parseRouteLine`, `loadIslandConfig` | `make faults`: every allocation call of Aeaea (46) and Scheria (47) failed in turn under Valgrind; malformed later route (`island_bad_second_route`) in `make test`, `make faults`, and `make memcheck`. The same fault suite run against the audited code reproduces the double free at allocation indices 18, 22, 26, 30 (as in the audit), so the test does detect F1. |
+| **F2** allocation failures reported as `Unknown command` | New `PARSE_ERROR` result, returned by `parseCommand`, `classifySail`, `classifyBuySell` on any allocation failure. `PARSE_UNKNOWN` is only an unrecognized verb. The terminal prints `Error: out of memory while parsing a command.` on stderr, cleans up, exits 2. | `include/types.h` (`eParseStatus`), `include/commands.h` (API doc), `src/commands.c`, `src/Odysseus.c: executeAndPrint` | `make faults`: `ody_map_nl`, `ody_sail`, `ody_buy_status_eof` sweeps fail every allocation; the suite rejects any `Unknown command` for valid input and any exit 2 without stderr. |
+| **F3** EOF remainder allocation failure silently dropped the last command | `handleEofRemainder` returns a status; `LINE_NONE` (nothing left) vs. `NOSTOS_ERROR` (allocation failure) are distinguished; failure is reported and propagated to exit 2. | `src/Odysseus.c: handleEofRemainder, runOdysseusTerminal` | `make faults`: `ody_map_eof`, `ody_buy_status_eof` (input without trailing newline); `make test`: `eof_without_newline`, `eof_partial_usage`. |
+| **F4** terminal output failures discarded | Every prompt, result line, and usage line is checked (`printPrompt`, `printParseResult`, `executeAndPrint`, `processAvailableLines`); read/poll/signal/line-buffer failures also report. Diagnostics are fixed literals written once to stderr (no allocation, no retry). Ithaca/Island check their readiness *and* shutdown messages and report on stderr. | `src/Odysseus.c` (`reportTerminalError`, `ERROR_*` in `include/Odysseus.h`); `src/Ithaca.c: runIthacaLifecycle`; `src/Island.c: runIslandLifecycle`; `include/Ithaca.h`, `include/Island.h` | `make faults`: stdout writes failed from each index onward for Odysseus (1..6), Ithaca (1..3, including the shutdown message after SIGINT), Island (1..5); each must exit 2 with a stderr diagnostic and a clean Valgrind log. |
+| **F5** style deviations | (a) All system includes moved into each module's own header; `.c` files include only project headers. (b) Every function definition now carries its own `@Name/@Def/@Arg/@Ret` header with an "argument = meaning" entry per parameter; no `See x.h` stubs remain. (c) `bIsVoyages/bIsMarket/bEof/bHasNumber` → `nIsVoyages/nIsMarket/nEof/nHasNumber` (`pbEof` → `pnEof`). (d) Constant-first ordering applied wherever one operand is a constant (`1 > lValue`, `INT_MAX < lAmount`, `0 > nResult`, `STOCK_RECORD_SIZE > nTotal`, ...); variable-vs-variable comparisons left as they are. Temporary realloc pointers renamed by type (`pstTemp`, `psTemp`, `appsTemp`). | all of `src/`, `include/` | `tests/style_check.py` (run first by `make test`): 0 findings on `src/`, `include/`, `tests/*.c`. The same checker reports 200+ findings on the audited copy (header stubs, includes, `b` prefixes, 11 constant-on-right comparisons, 28 stdio calls in the old `loader_check.c`), so it is not vacuous. It cannot judge naming quality or comment usefulness; that remains human review. |
+| **F6** Odysseus "SIGINT" memcheck actually tested EOF; weak checks | `run_memcheck.sh` rewritten: Odysseus stdin is a FIFO held open by the script, the case waits for readiness, sends `MAP\nSTAT` (partial line), requires the process still alive, sends SIGINT, waits with a bound, asserts exit 0 and exactly one `Command OK`. Every case asserts its exit status; logs must show 0 errors, 0 bytes in use, and no open descriptor beyond 0-2 that is not inherited (parsed from the `--track-fds` entries). Missing Valgrind → `NOT RUN`, exit 77, never success. | `tests/run_memcheck.sh` | 11/11 clean (4 SIGINT, 1 EOF, 6 failure paths). The descriptor parser was checked against a synthetic log with a leaked descriptor (reported as a failure). Separately, `tests/pty_ctrl_c.py` sends a *terminal-generated* CTRL+C (0x03 on a pseudo-terminal) to all three programs: exit 0. |
+| **F7** `make test` used a stale/missing checker; count-only assertions | `tests/bin/loader_check` is a real Makefile target built from `tests/loader_check.c` and the current loader objects; `make test` depends on it; `make clean` removes `tests/bin`. A missing checker or binary is a FAILURE. Assertions now `diff` every loaded field against values decoded independently (awk for text configs/voyages, `od` for the binary stock), check each filtered route keeps its raw IP/port, and check exit statuses and stderr on every case. `loader_check.c` itself rewritten with descriptor I/O and full style, so no forbidden-API exemption is needed. | `Makefile`, `tests/run_functional_tests.sh`, `tests/loader_check.c` | `make test`: 100/100. With the checker removed the suite reports 29 failures (not a skip). |
+
+Delivery items from the audit's section 4:
+
+1. **Montserrat** — still not verified (no access from this environment). Pending.
+2. **Real `G<group>_F1.tar`** — `make package GROUP=<n>` now actually builds the tar
+   (refuses to run without a group number). A trial archive was built, listed,
+   extracted into an empty directory, built, and run (see `docs/test-results.md` §8).
+   The real archive needs the real group number.
+3. **Report fields** — group number and hours remain pending; not invented.
+4. **Instructor design validation** — not obtained; unchanged (assumption A02).
+5. **Interpretation choices** — unchanged and still labeled as documented defaults
+   (A05-A09, A17, A03).
+6. **Test-helper exemption** — removed: `tests/loader_check.c` no longer uses stdio.
+   `tests/fault_inject.c` uses only `snprintf` (in-memory) and `write`, and exists only
+   in test builds.
+7. **Documentation claims** — `README.md`, `docs/test-results.md`, `docs/report.md` §5,
+   `docs/design.md` §2/§5, `docs/testing-walkthrough.md`, and this file were updated to
+   what was actually run.
+
+## 2. How to re-audit
+
+From `nostos/` on a GNU/Linux host with gcc, make, python3, and valgrind:
+
+```sh
+make clean && make all      # three executables, expect no gcc warnings
+make test                   # style_check (0 findings) + 100 functional checks
+make memcheck               # 11 Valgrind cases
+make faults                 # every allocation/stdout-write failure, under Valgrind
+python3 tests/pty_ctrl_c.py # terminal-generated CTRL+C for all three programs
+```
+
+`make faults` takes several minutes because it runs about 350 Valgrind executions;
+`FAULT_VALGRIND=0 make faults` runs the same invariants without Valgrind in seconds.
+Allocation indices are discovered by a calibration run (`NOSTOS_FAULT_REPORT`), so the
+suite adapts when code changes instead of relying on fixed numbers.
+
+## 3. Implemented phase and exclusions
+
+Phase 1 only. No sockets, forks, threads, IPC objects, trading, real map, food timers,
+mission-state changes, file transfers, glyph signing, or persistence. Signal handling
+uses blocked SIGINT + `signalfd` + `poll` with no signal handler at all.
+
+## 4. Requirement mapping (F01-F20)
 
 | ID | Requirement | Files / functions | Evidence |
 | --- | --- | --- | --- |
-| F01 | Three executables, exact CLI forms | `src/Odysseus.c`, `src/Ithaca.c`, `src/Island.c` `main()`; `Makefile` | `docs/test-results.md` §2 (clean build), §8 (fresh-extraction run) |
-| F02 | All Odysseus config fields stored | `config.c: loadOdysseusConfig/loadOdysseusIdentity/loadOdysseusResources/loadOdysseusFoods` | `tests/loader_check odysseus`; `docs/test-results.md` §5 |
-| F03 | Ithaca config + voyages, internal IDs | `config.c: loadIthacaConfig`; `voyages.c: loadVoyages/parseVoyageLine` (ID = `pstList->nCount + 1`, assumption A04) | `tests/loader_check ithaca`: 24 voyages, IDs 1..24, `docs/test-results.md` §5 |
-| F04 | Island config + raw route endpoints | `config.c: loadIslandConfig/loadIslandHeader/loadIslandRawRoutes` | `tests/loader_check island`: `island.rawRoute[*]` fields |
-| F05 | Real mandatory Sphragis filtering | `routes.c: filterIslandRoutes` (calls the real, linked `SPHRAGIS_filter_island_configuration`); `Island.c: loadIslandRoutesFiltered` calls it unconditionally before any route is stored valid | `docs/test-results.md` §4 (six real, library-decided, bidirectional-consistent results) |
-| F06 | Binary stock records until EOF | `stock.c: loadStockList/readFullRecord/decodeStockRecord` | All six real `.db` files decode to 8 products each; truncation test (`docs/test-results.md` §3, §6) |
-| F07 | Persistent in-process structures | `include/types.h` (all `tXConfig`/`tXList` types); one instance per process, whole-process lifetime | `docs/design.md` §2 |
-| F08 | Only Odysseus has a terminal | `Ithaca.c`/`Island.c` never read `STDIN_FILENO`; only `Odysseus.c` does (`handleStdinReadable`) | Source inspection; three concurrent sessions run in this work (`docs/test-results.md` §3) |
-| F09 | All eleven command forms recognized | `commands.c: dispatchVerb` + eleven `classify*` functions | `tests/run_functional_tests.sh` — 60/60 passing, covers all eleven |
-| F10 | Case-insensitive + numeric validation | `strcasecmp` throughout `commands.c`; `text.c: parseDigitsToLong` | Case-insensitivity + numeric-junk/overflow/leading-zero tests, all passing |
-| F11 | Exact success/unknown/usage messages | `include/commands.h` (`COMMAND_OK_MESSAGE`, `UNKNOWN_COMMAND_MESSAGE`, `USAGE_*`) | Official T p.2 matrix passes byte-for-byte (`docs/test-results.md` §3) |
-| F12 | No semantic/state checks | `commands.c` never touches a voyage/route/stock list; no such parameter exists in its signature | `ACCEPT 999`/`SAIL Atlantis`/`BUY UnknownProduct 3` all `Command OK`, tested |
-| F13 | Ithaca/Island init → alive → CTRL+C exit | `lifecycle.c: waitForSignalOnly`; `Ithaca.c/Island.c: run*Lifecycle` | 0-CPU-tick idle check + SIGINT shutdown, `docs/test-results.md` §3 |
-| F14 | All processes free resources on CTRL+C/error | Every `run*Lifecycle`/`initialize*` releases exactly what it acquired, in every branch | Valgrind: 0 errors, 0 bytes leaked, all six cases (`docs/test-results.md` §6) |
-| F15 | Required I/O / forbidden-API restrictions | `io.c` (only `read`/`write`/`open`/`close`, `vasprintf`) | §5 below: forbidden-API scan, zero hits |
-| F16 | No busy waits/crashes/warnings | `lifecycle.c` (`poll()` infinite timeout, never zero-timeout); `Makefile` (`-Wall -Wextra`, zero warnings) | `docs/test-results.md` §2 (build), §3 (idle CPU) |
-| F17 | Makefile + reusable modules | `Makefile`; `src/*.c` (11 files), `include/*.h` (14 files), no monolithic single-file implementation | `docs/test-results.md` §2 |
-| F18 | Correct tar, self-contained, fresh build | — | `docs/test-results.md` §8 (actually performed; Montserrat itself still pending) |
-| F19 | Course coding conventions | All of `src/`/`include/` | §5 below (style audit) |
-| F20 | Design validation status honestly recorded | `docs/assumptions.md` A02 | **Not obtained** — explicitly flagged, never claimed |
+| F01 | Three executables, exact CLI forms | `Odysseus.c`, `Ithaca.c`, `Island.c` `main()`; `Makefile` | clean build; `*_no_args` exit-1 tests |
+| F02 | All Odysseus config fields stored | `config.c: loadOdysseusConfig`, `loadOdysseusIdentity`, `loadOdysseusResources`, `loadOdysseusFoods` | `make test`: `odysseus_fields` (diff vs. awk decode) |
+| F03 | Ithaca config + voyages, internal IDs | `config.c: loadIthacaConfig`; `voyages.c: loadVoyages`, `parseVoyageLine` | `ithaca_fields` (all 24 records, IDs 1..24, every field) |
+| F04 | Island config + raw endpoints | `config.c: loadIslandConfig`, `loadIslandHeader`, `loadIslandRawRoutes`, `appendRawRouteLine` | `*_config_fields` for all six islands |
+| F05 | Real Sphragis filtering, endpoints kept | `routes.c: filterIslandRoutes`, `collectSurvivors`; `Island.c: loadIslandRoutesFiltered` | `*_filtered_routes` (count = library result = observed 2/1/1/1/3/2; each survivor keeps its raw IP:port) |
+| F06 | Binary stock until EOF, truncation rejected | `stock.c: loadStockList`, `readFullRecord`, `decodeStockRecord` | `*_stock_fields` (48 records vs. `od` decode); `island_truncated_stock` |
+| F07 | Persistent in-process structures | `include/types.h` | `docs/design.md` §2 |
+| F08 | Only Odysseus has a terminal | only `Odysseus.c` reads `STDIN_FILENO` | source; server SIGINT tests run with stdin `/dev/null` |
+| F09-F11 | Eleven commands, case-insensitive, exact messages | `commands.c`, `include/commands.h` | `make test` command matrix (official sheet + edges) |
+| F12 | No state checks | `commands.c` has no access to any list | `accept_absent_id`, `sail_unknown_island`, `buy_unknown_product` |
+| F13 | Ithaca/Island block until CTRL+C | `lifecycle.c: waitForSignalOnly` | SIGINT tests; pty CTRL+C; 0 CPU ticks idle over 3 s (all three) |
+| F14 | Release everything on CTRL+C/EOF/error | `run*Lifecycle`, `initialize*`, loader cleanup paths | `make memcheck` 11/11; `make faults` |
+| F15 | Required I/O, forbidden APIs | `io.c` (only `read/write/open/close`, `vasprintf`) | `style_check.py` prohibited-call scan: 0 |
+| F16 | No busy waits, no warnings | `poll(..., -1)` only | idle CPU check; gcc output |
+| F17 | Makefile + reusable modules | `Makefile`, 11 `src/*.c`, 13 `include/*.h` | build |
+| F18 | Self-contained tar, fresh build | `make package GROUP=<n>` | trial archive extracted/built/run (§8 of test results); Montserrat pending |
+| F19 | Course conventions | all authored code | `style_check.py` + human review |
+| F20 | Design validation honestly recorded | `docs/assumptions.md` A02 | **not obtained** |
 
-## 3. Module map and ownership
-
-See `docs/design.md` §1 (module map) and §2 (the full per-type ownership table). Summary
-of destructor pairing (every loader has a matching destroyer, safe on partial state):
+## 5. Ownership summary
 
 | Owning type | Loader | Destructor |
 | --- | --- | --- |
@@ -54,178 +94,36 @@ of destructor pairing (every loader has a matching destroyer, safe on partial st
 | `tIthacaConfig` | `loadIthacaConfig` | `destroyIthacaConfig` |
 | `tVoyageList` | `loadVoyages` | `destroyVoyageList` |
 | `tIslandConfig` | `loadIslandConfig` + `filterIslandRoutes` | `destroyIslandConfig` |
-| `tRouteList` (raw or valid) | `loadIslandConfig` (raw) / `filterIslandRoutes` (valid) | `destroyRouteList` |
+| `tRouteList` (raw or valid) | `loadIslandConfig` / `filterIslandRoutes` | `destroyRouteList` |
 | `tStockList` | `loadStockList` | `destroyStockList` |
-| `tParsedCommand` | `parseCommand` | `destroyParsedCommand` |
+| `tParsedCommand` | `parseCommand` | `destroyParsedCommand` (safe after every result, including `PARSE_ERROR`) |
 
-## 4. Exact compiler/linker commands, platform, hashes
+Every loader resets its output first and releases it on its own failure; list counts
+include only fully owned entries; every `realloc` goes through a temporary pointer.
 
-See `docs/test-results.md` §1-2 for the full transcript. Summary:
+## 6. Known limits and unverified points
 
-```
-CC = gcc, CFLAGS = -std=gnu11 -Wall -Wextra -g -MMD -MP, CPPFLAGS = -D_GNU_SOURCE -Iinclude -Ilib
-gcc 13.3.0, WSL2 Ubuntu 24.04.2 LTS, kernel 6.18.33.2-microsoft-standard-WSL2
-lib/sphragis.o MD5 identical to Phase1/Sphragis libray/sphragis.o: 1be14ef0b94731413d8d46debf8f40c2
-```
+- **Montserrat not tested.** Run the commands in §2 there before submission.
+- **Sphragis error path (A19).** On a negative library return the adapter frees any
+  non-NULL slot of its temporary array. The six fixture islands never produce a
+  negative return, so this path is still unexercised against the real library.
+- **Fault injection scope.** The wrappers count allocation calls made by linked
+  objects (project code and `sphragis.o`); allocations made inside libc itself (for
+  example inside `strtok_r`, which makes none, or `open`) are not injected.
+  `vasprintf` is wrapped as a whole.
+- **Group number, hours, design validation** — pending, owned by the student.
 
-## 5. Style / forbidden-API audit (scoped to authored source only)
+## 7. Reviewer checklist
 
-Scan of `src/*.c include/*.h` (never `All Materials`, the PDFs, or `lib/sphragis.o`):
-
-```sh
-$ grep -nE '\b(printf|fprintf|scanf|fscanf|gets|puts|getchar|fgets|fopen|fread|fwrite|getline|perror|system|popen|stat|fstat|lstat)\s*\(' src/*.c include/*.h
-(no matches)
-$ grep -n '\bgoto\b' src/*.c include/*.h
-(no matches)
-$ grep -n '?' src/*.c include/*.h   # ternary operator scan, excluding comment banners
-(no matches)
-```
-
-`asprintf`/`vasprintf` (permitted in-memory formatting) are used exactly once, in
-`io.c: writeFormatted`. Function-length audit (brace-depth script, cross-checked
-manually per the guide's caveat that a naive regex is not fully reliable): every
-function in `src/` is at or under 45 physical lines; the one that initially exceeded it
-(`loadOdysseusHeader`, 53 lines) was split into `loadOdysseusIdentity` +
-`loadOdysseusResources`, re-measured, and re-verified by rebuilding and re-running the
-full test suite (still 60/60 passing).
-
-`tests/loader_check.c` is the one exception: it is a **test-only diagnostic**, not part
-of `make all` and not one of the three delivered executables, and uses `printf`/`fprintf`
-deliberately (documented in its own file header and in `README.md`). It is excluded from
-this scan's scope by design, the same way the guide excludes `All Materials` and the
-vendor object.
-
-Hungarian naming, function headers (`@Name`/`@Def`/`@Arg`/`@Ret`), file headers
-(`@File`/`@Purpose`/`@Author`/`@Date`), four-space indentation, same-line braces,
-constant-first comparisons, and no chained assignments were applied throughout by
-construction; spot-check any file in `src/`/`include/` to verify.
-
-## 6. Sphragis integration evidence
-
-See `docs/test-results.md` §4 for the full six-island table (real, library-decided
-route counts, cross-checked as bidirectional and endpoint-consistent) and §6 for the
-Valgrind result on the `island` binary specifically (0 errors, 0 leaked bytes, 48
-allocs/48 frees on the CTRL+C path that includes one real filtering call). The adapter
-algorithm itself is in `routes.c: filterIslandRoutes`, documented step-by-step in
-`docs/design.md` §4.
-
-## 7. Archive listing and fresh-extraction evidence
-
-Actually performed this session (not merely planned) — see `docs/test-results.md` §8 for
-the full transcript: a real `tar` archive of this directory (88 entries, `build/` and
-`tests/valgrind-logs/` excluded) was extracted into a clean `/tmp` directory with zero
-access back to the original project files, built with `make clean && make all` (zero
-warnings), and both `ithaca` (SIGINT after 0.5s, clean shutdown) and `odysseus` (two
-real commands via stdin) were run successfully from that fresh copy. The actual
-`G<group>_F1.tar` with the real group number still needs to be produced before
-submission (group number pending, assumption A15).
-
-## 8. Assumptions status (A01-A21)
-
-See `docs/assumptions.md` for the full register with rationale. Status summary:
-
-- **Resolved by explicit rule/source precedence:** A01, A11.
-- **Implemented defaults (documented, not instructor-confirmed):** A04-A10, A12-A14,
-  A16-A21.
-- **Unresolved, needs the student/instructor:** A02 (design validation — **not
-  obtained**), A03 (singleton Ithaca enforcement expectation), A15 (group number,
-  teammates, actual hours).
-
-## 9. Known issues, unsupported claims removed, unrun checks
-
-- No known correctness defect as of this session's testing (60/60 functional tests, 6/6
-  clean Valgrind cases, zero compiler warnings).
-- **Not run:** Montserrat itself (§7 above is a real GNU/Linux stand-in, not proof of
-  Montserrat acceptance); a literal keyboard-generated `SIGINT` in an interactive TTY
-  session (only `kill -INT`, which delivers the identical signal Ithaca/Island/Odysseus
-  observe, was used); allocation-failure fault injection (only real, naturally-occurring
-  error paths — missing/malformed/truncated files — were exercised, not a wrapped
-  `malloc` that fails on a chosen call).
-- **Adapter defensive assumption (A19), not a proven library guarantee:** on a negative
-  `SPHRAGIS_filter_island_configuration()` return, `routes.c` defensively frees any
-  non-NULL slot left in the temporary name array, since the header does not document
-  array mutation on the error path. This was never actually exercised against a real
-  invalid-island/invalid-connection input in this session (only the success path was
-  tested, since the six real fixture islands are all valid names) — a reviewer with
-  Sphragis source access could confirm or refute this defensive choice directly; absent
-  that, treat it as a documented, reasoned assumption, not a verified fact.
-- No mocked Sphragis anywhere; the delivered `island` binary always links and calls the
-  real `lib/sphragis.o`.
-
-## 10. Student walkthrough for the interview
-
-Short answers a student should be able to expand on (full context in `docs/design.md`
-and `docs/report.md` §5):
-
-- **read/write vs. printf/fgets:** required by the project; `read()` never
-  NUL-terminates and can return fewer bytes than requested (or split a "line" across
-  calls), so every loader must accumulate and check explicitly (`text.c:
-  tLineBuffer`/`readNextLine`), unlike `fgets`, which hides that complexity (and is
-  banned anyway).
-- **EOF / blank line / error / partial record:** `read() == 0` with nothing buffered is
-  EOF; a `\n` with nothing before it is a legitimate empty line; `read() < 0` is an
-  error (distinguished from `EINTR`, which is retried); a binary record that stops
-  partway through its 108 bytes is a truncation error, never silently counted as a
-  complete product (`stock.c: readFullRecord`).
-- **Ownership / partial-init cleanup:** every loader zeroes its output first, so its own
-  destructor is always safe to call on it, success or failure; a later stage's failure
-  only needs to clean up what earlier stages acquired, because each loader is
-  self-cleaning on its own failure (see `docs/design.md` §7 for the exact acquisition
-  order per process).
-- **realloc via a temporary pointer:** a failed `realloc` returns `NULL` but leaves the
-  original block valid; assigning the result directly to the only pointer would leak
-  that block and lose the data. Every growable array here (`voyages.c`, `stock.c`,
-  `config.c`'s route list) reallocs into a temporary first.
-- **What Sphragis frees, and how endpoints survive it:** it frees rejected names inside
-  the array it is given and compacts survivors in place; it never sees IP/port at all.
-  The adapter hands it disposable name *copies*, then matches survivor names back to the
-  original raw routes (which still own their IP/port) to rebuild a fresh valid list —
-  see `routes.c: filterIslandRoutes`.
-- **Why `ACCEPT 999` succeeds now:** Phase 1 is explicitly syntax-only (P p.15-16, 19);
-  no voyage list, connection, or docking state is consulted by the parser at all.
-- **Why stock records are fixed-size binary, and why ABI matters:** the statement
-  specifies `char name[100]; int amount; int price;` on disk; reading it as a native
-  struct risks compiler-inserted padding or endianness mismatches across machines, so
-  this implementation decodes each field from raw bytes explicitly instead.
-- **One CTRL+C, no unsafe handler cleanup:** SIGINT is blocked for the whole process and
-  never has a handler; it is only ever observed by `poll()` reporting its `signalfd`
-  readable, which happens exactly once and cannot race with the moment a wait begins
-  (`docs/design.md` §6).
-- **Idle vs. busy:** `poll(..., -1)` with an infinite timeout genuinely blocks in the
-  kernel (0 CPU ticks measured over 3 idle seconds); a "busy" design would poll with a
-  zero/short timeout in a loop and burn CPU continuously.
-- **What Phase 2 would add:** real state (connected/docked/active-voyage) threaded
-  through the same parser and loaders, sockets replacing the "load-and-store" endpoints
-  that already exist, and stock mutation on top of the stock list already loaded — none
-  of which requires reshaping `commands.c`'s dispatch structure or any loader's contract.
-- **What was actually proven vs. what remains unverified:** see section 9 above,
-  verbatim — do not overstate Montserrat readiness or the Sphragis error-path assumption
-  beyond what is written there.
-
-## Reviewer checklist (guide §18)
-
-- [x] All three programs exist, build, and use the exact CLI forms.
-- [x] No loader silently drops required data (field-level dump via `tests/loader_check`).
-- [x] No hardcoded fixture counts/results (route/voyage/stock counts are all
-      library/file-driven; verified by re-running against genuinely different-sized
-      inputs — empty voyages/stock files, a longer/shorter route candidate list).
-- [x] Correct real binary-stock layout and EOF/truncation handling.
-- [x] Actual Sphragis filtering, correct success interpretation (nonnegative count, not
-      `SPHRAGIS_OK`), ownership and endpoint matching (verified bidirectionally).
-- [x] Every command recognized, case handled, arguments extracted, numeric conversion
-      checked (60/60 functional tests).
-- [x] Success/unknown/usage messages correct; extra tokens rejected.
-- [x] No premature semantic checks or Phase 2/3 implementation.
-- [x] Safe CTRL+C and EOF lifecycle without busy waits or signal-handler heap work
-      (0 CPU ticks idle; no handler exists in the codebase at all).
-- [x] Error exits release partial state and owned descriptors (Valgrind: 0 leaks across
-      6 cases including 3 failure paths).
-- [x] No warnings, prohibited API shortcuts, or accidental vendor deletion in clean
-      (MD5-verified `lib/sphragis.o` unchanged by `make clean`).
-- [x] Style guide applied, including Hungarian names, headers, includes, comments, and
-      short functions (one violation found and fixed during this session; see §5).
-- [x] Report, README, bibliography, and interview explanations match actual code.
-- [ ] Genuine self-contained tar verified on **Montserrat** — a real fresh-extraction
-      build/run was verified on WSL2 Ubuntu (§7), but Montserrat itself is pending.
-- [x] Human design validation and ambiguous requirements honestly recorded (design
-      validation explicitly **not** obtained; recorded, never fabricated).
+- [x] Three programs build with no gcc warnings (WSL2).
+- [x] Every loaded field compared with an independent decode.
+- [x] Real Sphragis filtering with endpoint preservation.
+- [x] Every command form, case handling, numeric validation, exact messages.
+- [x] No premature state checks, no Phase 2/3 features.
+- [x] CTRL+C (signal and terminal-generated) and EOF shutdown, no busy wait.
+- [x] Every allocation and stdout-write failure handled without crash, leak, invalid
+      free, lost command, or silent failure (fault suite, Valgrind).
+- [x] Mechanical style rules: 0 findings; human style review still welcome.
+- [ ] Montserrat build and test run.
+- [ ] Real `G<group>_F1.tar` (needs the group number).
+- [ ] Instructor design validation (not obtained).

@@ -21,4 +21,8 @@
 #include "io.h"
 #include "status.h"
 
+/* Fixed stderr diagnostics (literals: reporting needs no allocation). */
+#define ERROR_ISLAND_WRITE "Error: Island could not write to standard output.\n"
+#define ERROR_ISLAND_SIGNAL "Error: Island failed while waiting for CTRL+C.\n"
+
 #endif

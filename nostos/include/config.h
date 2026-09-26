@@ -12,7 +12,14 @@
  * @Date: 2026-09-21
  */
 
-/* Own */
+/* System Includes */
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+
+/* Project Includes */
 #include "types.h"
 
 /* Exact marker line (after CRLF normalization) that introduces an

@@ -1,114 +1,87 @@
 # Test results — Nostos Phase 1
 
-All results below were actually executed in this session on 21 September 2026. Nothing
-here is claimed without having been run and its output inspected. Montserrat-specific
-verification is explicitly marked pending (see section 7).
+All results below were run on **26 September 2026**, after the corrections for the
+independent audit (`PHASE1_AUDIT_RESULTS.md`). Each one was actually executed and its
+output inspected. Results from the earlier 21 September session are superseded by this
+file. **Montserrat was not used** (see §10).
 
 ## 1. Platform and toolchain
 
-Local Linux target: **WSL2 Ubuntu 24.04.2 LTS**, a genuine GNU/Linux kernel and
-userspace (not Windows emulation — `uname -a` reports a real Linux kernel, and the
-supplied `lib/sphragis.o` is ELF64 little-endian x86-64, confirmed identical by MD5 to
-the original `Phase1/Sphragis libray/sphragis.o`). This is strong evidence but **not**
-proof of Montserrat acceptance (different distro/kernel/glibc); see section 7.
+WSL2 Ubuntu 24.04 — a real Linux kernel and userspace, but not the grading host.
 
 ```
-uname -a: Linux LAPTOP-Q08GCJ0V 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC
-          Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+kernel:   6.18.33.2-microsoft-standard-WSL2 (x86_64)
 gcc:      gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
 valgrind: valgrind-3.22.0
+python3:  3.12 (test helpers only)
+lib/sphragis.o SHA-256 identical to Phase1/Sphragis libray/sphragis.o (b50cdd8dfebe3f17...)
 ```
 
 ## 2. Build
 
 ```sh
-$ make clean && make all
+make clean && make all
 ```
 
-Result: **all three executables build with zero compiler warnings** under
-`-Wall -Wextra -std=gnu11`. `island` links successfully against the real, unmodified
-`lib/sphragis.o` (confirmed no undefined-reference errors; no guessed extra linker flags
-were needed). Verified:
+All three executables build with **no gcc warnings** (`-std=gnu11 -Wall -Wextra`).
+Building on the Windows-mounted `/mnt/c/...` path makes `make` itself print
+`Clock skew detected` (a timestamp quirk of that mount, not a compiler message); in the
+fresh-extraction build on native `/tmp` (§9) the warning count was 0.
 
-*Environmental note:* building directly from the Windows-mounted `/mnt/c/...` path (a
-DrvFs 9p filesystem) occasionally makes `make` print `Clock skew detected` / a
-modification-time-in-the-future warning — this is a `make` timestamp-precision quirk of
-that specific mount, not a compiler warning about the code (no `gcc` line ever emits a
-warning). Confirmed absent when the identical tree is copied to a native Linux
-filesystem (`/tmp`) and built there (also used for the fresh-extraction check in §8).
-
-- A second `make all` with nothing changed performs no rebuild (`make: Nothing to be
-  done for 'all'.`).
-- Touching `include/text.h` correctly triggers a rebuild of every object that includes
-  it (directly or transitively) and relinks all three executables (`-MMD -MP`
-  dependency tracking).
-- `make clean` removes only `build/*.o`, `build/*.d`, and the three executables; MD5 of
-  `lib/sphragis.o` and `data/voyages.dat` verified unchanged before/after.
-- File type of all three: `ELF 64-bit LSB pie executable, x86-64 ... for GNU/Linux 3.2.0`.
-
-## 3. Functional tests: `tests/run_functional_tests.sh`
-
-Run via `make test`. Result on this platform:
+## 3. Style scan: `python3 tests/style_check.py` (first step of `make test`)
 
 ```
-=== Summary: 60 passed, 0 failed ===
+style_check: 0 finding(s)
 ```
 
-This covers, exactly as captured (not paraphrased):
+Checked mechanically over `src/*.c`, `include/*.h`, `tests/*.c`: a definition header
+above every function with `@Name` matching the function, `@Def`, `@Arg` containing
+`name = meaning` for every parameter, and `@Ret`; at most 45 lines from signature to
+closing brace; no `#include <...>` in a `.c` file; `@File/@Purpose/@Author/@Date` file
+headers; include guards; no `b`-prefixed integers; no comparison with a constant on the
+right; no prohibited stdio/stat/system calls.
 
-- The official positive matrix (T p.2): `CONNECT ITHACA`, `LIST VOYAGES`, `ACCEPT 2`,
-  `SAIL Aeaea`, `MAP`, `LIST MARKET`, `BUY DriedFish 3`, `SELL Barley 10`, `STATUS`,
-  `DELIVER`, `CLAIM`, `cOnNeCt iThAcA` — all `Command OK`.
-- The official negative matrix (T p.2): `ACCEPT` → `Usage: ACCEPT <voyage_id>`;
-  `BUY DriedFish` → `Usage: BUY <product> <amount>`; `MAP now` → `Usage: MAP`;
-  `something else` → `Unknown command`.
-- Case-insensitivity, missing/wrong fixed words, missing/extra arguments, prefix
-  impostors (`MAPS`, `ACCEPTED 2`, `BUYER X 1` → `Unknown command`), numeric junk,
-  nonpositive quantities, ID lexical policy (`0`, `-1`, `+2` rejected; `0002` accepted
-  as 2), overflow (`ACCEPT 99999999999999999999` → usage, no wraparound), state
-  independence (`ACCEPT 999`, `SAIL Atlantis`, `BUY UnknownProduct 3` → `Command OK`),
-  the `BUY MAP` quantity rule (A06) and `SELL MAP 1` (A07), and blank-line handling
-  (A08, no output).
-- Loader smoke tests: missing CLI args (exit 1), missing config/voyages/stock files
-  (exit 2), a genuinely truncated stock file (7 full + 44 partial bytes of an 8th
-  record, exit 2, controlled error), a malformed island config missing the
-  `--- ROUTES ---` marker (exit 2).
-- Loader field-level checks via `tests/loader_check` (see section 5): full Odysseus
-  field dump, 24 Ithaca voyages, 8 products for every one of the six real stock files.
+Control run: the same checker on the audited (pre-correction) copy reports over 200
+findings, including all the categories named in audit finding F5.
 
-Manually run beyond the script (transcripts captured in this session, reproducible with
-the commands shown):
+## 4. Functional suite: `make test`
 
-- `printf "CONNECT ITHACA\nSTATUS" | ./odysseus configs/odysseus.dat` (no trailing
-  newline on the final command) → both processed, `Command OK` twice, exit 0.
-- `printf "" | ./odysseus configs/odysseus.dat` (empty stdin) → prints only the
-  readiness line and one prompt, exit 0, no hang.
-- CTRL+C with a partial, newline-less command already buffered (`CONNECT ITH` sent
-  through a FIFO, then real `SIGINT`) → the partial command is silently discarded, clean
-  shutdown, exit 0.
-- CTRL+C at idle for `ithaca`/`island`/`odysseus` → clean shutdown message, exit 0.
-- **Idle CPU check**: `ithaca` backgrounded, `/proc/<pid>/stat` fields 14+15 (utime +
-  stime) read before and after a 3-second sleep with the process otherwise untouched:
-  **0 ticks consumed in both readings** — confirms a genuinely blocked wait, not a busy
-  loop.
-- Six real islands (`aeaea`..`thrinacia`) each started against their own config/stock
-  pair and terminated with SIGINT: all print `Island <Name> initialized.`,
-  `Port capacity: N ships.`, a **library-decided** (not hardcoded) route count, and
-  `8 products available.`, then `<Name> closes its port.` on shutdown, exit 0 in every
-  case.
-- CRLF-normalized copy of `ithaca.dat` (every line's `\n` replaced with `\r\n`) still
-  loads all 24 voyages correctly.
-- Empty `voyages.dat` → `Ithaca initialized. 0 voyages loaded.`, no crash (zero-record
-  policy).
-- Empty `stock.db` → `0 products available.`, no crash (zero-record policy).
+```
+=== Summary: 100 passed, 0 failed ===
+```
 
-## 4. Sphragis integration: real, library-decided route filtering
+Contents (every case also requires exit status 0 and empty stderr unless a failure is
+expected):
 
-Using `tests/loader_check island <config> <stock>` against the real six authored
-fixture configs (each listing all five *other* islands as raw candidates — no topology
-assumed or hardcoded):
+- readiness line with the loaded ship name;
+- the official test-sheet positive batch (12 commands incl. mixed case) and the four
+  official negative cases;
+- case-insensitivity, missing/wrong fixed words, missing and extra arguments for every
+  verb, prefix impostors (`MAPS`, `ACCEPTED`, `BUYER`), numeric junk, zero/negative,
+  `+2`, `INT_MAX` accepted, `INT_MAX + 1` and 20-digit overflow rejected, leading zeros,
+  state-independence (`ACCEPT 999`, `SAIL Atlantis`, `BUY UnknownProduct 3`),
+  `BUY MAP 1`/`BUY MAP 2`/`SELL MAP 1`;
+- blank and whitespace-only lines, tabs, CRLF, final command without newline (both a
+  valid one and a usage error);
+- 13 argument/initialization failure cases with exact exit status (1 or 2) and a
+  required stderr diagnostic: missing files, truncated stock, missing routes marker,
+  malformed route after a valid route, truncated Odysseus config, port out of range;
+- SIGINT shutdown with bounded waits: Ithaca and all six islands (exit 0, shutdown
+  line, empty stderr, loaded voyage count in the readiness line), and Odysseus with
+  stdin held open and a partial line buffered;
+- loader field comparisons: `tests/bin/loader_check` output diffed against values
+  decoded independently from the files (awk for text, `od` for the binary stock):
+  every Odysseus field, Ithaca config plus all 24 voyages (IDs 1..24, every field),
+  each island's header and raw routes, filtered routes (see §5), and all 48 stock
+  records.
 
-| Island | Raw candidates | Real Sphragis result | Valid routes (name + endpoint) |
+`make test` rebuilds `tests/bin/loader_check` from current sources. Control run with
+the checker deleted: `80 passed, 29 failed` (the missing prerequisite and every
+dependent comparison fail; nothing is skipped).
+
+## 5. Sphragis filtering (real library)
+
+| Island | Raw candidates | Library result | Surviving routes (endpoint from config) |
 | --- | ---: | ---: | --- |
 | Aeaea | 5 | 2 | Scheria 172.16.214.24:8620, Thrinacia 172.16.214.25:8621 |
 | Aeolia | 5 | 1 | Scheria 172.16.214.24:8620 |
@@ -117,125 +90,103 @@ assumed or hardcoded):
 | Scheria | 5 | 3 | Aeaea 172.16.214.20:8621, Aeolia 172.16.214.21:8622, Ismarus 172.16.214.22:8623 |
 | Thrinacia | 5 | 2 | Aeaea 172.16.214.20:8621, Ogygia 172.16.214.23:8624 |
 
-Cross-checked as fully **bidirectional and endpoint-consistent** with no manual
-correction: Aeaea↔Scheria, Aeaea↔Thrinacia, Aeolia↔Scheria, Ismarus↔Scheria,
-Ogygia↔Thrinacia all appear on both sides with matching IP:port. This is direct
-evidence that (a) the real `SPHRAGIS_filter_island_configuration()` was actually called
-and actually decided the survivor set (a hub topology centered on Scheria/Thrinacia that
-was never hardcoded anywhere in this codebase), and (b) the adapter's survivor-matching
-never crosses a name with the wrong endpoint.
+The suite checks, per island: library result = stored route count = the count the
+audit observed independently; each stored route appears among the raw routes with the
+same IP and port.
 
-## 5. Loader field-level evidence: `tests/loader_check`
+## 6. Valgrind: `make memcheck`
 
-Built separately (not part of `make all`; see README "Tests" section). Sample output
-(full transcripts available by re-running):
+Options: `--leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes`.
 
 ```
-odysseus.name=Polyphemus
-odysseus.storageFolder=./polyphemus_files
-odysseus.ithaca=172.16.214.10:8620
-odysseus.initialIsland=Aeaea 172.16.214.20:8621
-odysseus.gold=250
-odysseus.foodCount=2
-odysseus.food[0]=Barley 40
-odysseus.food[1]=DriedFigs 60
+OK: odysseus_sigint_partial (status 0)
+OK: ithaca_sigint (status 0)
+OK: island_aeaea_sigint (status 0)
+OK: island_scheria_sigint (status 0)
+OK: odysseus_eof (status 0)
+OK: odysseus_bad_args (status 1)
+OK: odysseus_missing_config (status 2)
+OK: odysseus_truncated_config (status 2)
+OK: ithaca_missing_voyages (status 2)
+OK: island_truncated_stock (status 2)
+OK: island_bad_second_route (status 2)
+=== Memcheck summary: 11 clean, 0 failed ===
 ```
 
-```
-ithaca.voyageCount=24
-ithaca.voyage[0]=id=1 object=AeolusBagOfWinds file=objects/aeolus_bag_of_winds.png dest=Scheria reward=1150
-ithaca.voyage[2]=id=3 object=OdysseusBow file=objects/odysseus_bow.png dest=Ismarus reward=1050
-ithaca.voyage[23]=id=24 object=AtlasStarAstrolabe file=objects/atlas_star_astrolabe.png dest=Thrinacia reward=900
-```
+"Clean" means: expected exit status, `ERROR SUMMARY: 0 errors`,
+`in use at exit: 0 bytes in 0 blocks`, and no open descriptor other than 0-2 or one
+marked `<inherited from parent>` (in every log the only extra descriptor is fd 3,
+Valgrind's own log file, marked inherited). The descriptor parser was checked against a
+synthetic log containing a non-inherited descriptor: it reported the failure.
 
-`OdysseusBow` is voyage #3, matching the actual supplied `voyages.dat` order (not the
-illustrative statement excerpt where it appears first). The last record matches exactly.
+## 7. Fault injection: `make faults`
 
-All six stock files decode to exactly 8 products each with correct name/amount/price
-(cross-checked independently against a Python `struct.unpack('<ii', ...)` decode of the
-raw bytes before any C code ran, e.g. `Aeaea.db` → first record `Barley 140kg 7g/kg`,
-last record `EnchantedHerbs 60kg 22g/kg`, matching both the guide's documented fixture
-facts and the C loader's own output).
-
-## 6. Valgrind: `tests/run_memcheck.sh`
-
-Run via `make memcheck`. All six cases reported **0 errors, 0 bytes in 0 blocks at
-exit** (every heap allocation matched by a free — see exact alloc/free counts below),
-and **no application-opened descriptor left open** (only Valgrind's own log-file
-descriptor and an inherited `/dev/ptmx` appear in the "FILE DESCRIPTORS" section, both
-pre-existing/inherited, not opened by this codebase):
-
-| Case | Path exercised | Allocs / frees | Errors |
-| --- | --- | ---: | ---: |
-| `odysseus_sigint` | Full 20-command matrix via stdin, then real SIGINT mid-idle | 93 / 93 (EOF run); 28 / 28 (SIGINT-on-partial-line run) | 0 |
-| `ithaca_sigint` | Normal init → SIGINT → shutdown | 134 / 134 | 0 |
-| `island_sigint` | Real Sphragis filtering → SIGINT → shutdown | 48 / 48 | 0 |
-| `odysseus_missing_config` | Config open failure | 0 / 0 | 0 |
-| `ithaca_missing_voyages` | Voyages open failure after config load | 8 / 8 | 0 |
-| `island_truncated_stock` | Genuinely truncated stock record | 43 / 43 | 0 |
-
-The `island_sigint` case is the most important one to audit: it is the only path that
-exercises the real Sphragis adapter's temporary-array ownership handoff under Memcheck,
-and it reports zero leaks and zero double-frees.
-
-## 7. What remains unrun / pending
-
-- **Montserrat itself was not accessed in this session.** All results above are from a
-  real GNU/Linux (WSL2 Ubuntu 24.04) build/run, which is strong local evidence but not
-  proof of acceptance on the actual grading host (different distro/kernel/glibc/`gcc`
-  version are possible). Re-running `make clean && make all && make test && make
-  memcheck` on Montserrat itself is the outstanding step before calling this
-  submission-ready.
-- A genuine terminal-generated `SIGINT` (real TTY line discipline sending `Ctrl+C`, not
-  a piped byte or `kill -INT`) was not exercised interactively in this session; `kill
-  -INT <pid>` sends the identical signal Ithaca/Island/Odysseus observe via their
-  `signalfd`, so the code path is the same, but a literal keyboard-driven session is
-  still worth doing once on Montserrat.
-- Allocation-failure fault injection (e.g. a wrapped `malloc` that fails on the Nth
-  call) was **not** performed; only the ordinary error paths reachable by real
-  missing/malformed files were tested. Every allocation error path was inspected by
-  code review (see `docs/audit-handoff.md`), not exercised under fault injection.
-- No design validation meeting with instructors/interns has taken place (assumption
-  A02); this implementation is not to be presented as instructor-approved.
-- The final `G<group>_F1.tar` has not been produced, since the actual group number is
-  not established by this handoff (assumption A15) — see section 8 for the
-  fresh-extraction check already performed, which stands in for it functionally.
-
-## 7a. Non-hardcoding check: variable-sized voyages file
-
-`tests/loader_check ithaca configs/ithaca.dat <file>` against a 10-line truncated copy
-and a 48-line doubled copy of the real `voyages.dat`:
+`tests/bin/*-fault` are the real programs linked with test-only wrappers
+(`-Wl,--wrap=malloc,--wrap=realloc,--wrap=vasprintf,--wrap=write`). A calibration run
+counts the allocation calls of each scenario; the suite then fails each call index in
+turn, and separately fails stdout writes from each index onward.
 
 ```
-head -10 data/voyages.dat  -> ithaca.voyageCount=10
-cat v.dat v.dat            -> ithaca.voyageCount=48
+ody_map_nl            26 allocation calls      (MAP + newline)
+ody_map_eof           26                       (MAP, no newline: EOF path)
+ody_sail              27
+ody_buy_status_eof    30                       (two commands, last without newline)
+island_aeaea          46                       (SIGINT after readiness)
+island_scheria        47
+island_bad_second_route  1 case               (malformed route after a stored one)
+ithaca               132                       (SIGINT after readiness)
+ody_output             6 write-failure points
+ithaca_output          3
+island_output          5
+=== Fault summary: 349 passed, 0 failed (valgrind=1) ===
 ```
 
-Confirms the voyage count (and, by the same array-growth code path, the route/stock
-counts) is genuinely file-driven, not hardcoded to the supplied fixture's 24 records.
+Invariants checked on every run: no death by signal/abort; exit 0 only with complete
+normal output, exit 2 only with a stderr diagnostic; never `Unknown command` for a valid
+command; Valgrind log clean as in §6.
 
-## 8. Fresh-extraction packaging check (guide step 16) — actually run
+Control run: the same suite (without Valgrind) against the audited code reports the
+audit's double free (`free(): double free detected in tcache 2`, exit 134) at
+allocation indices 18, 22, 26, 30 for both islands, silent exit-2 failures, a dropped
+final command after exit 0, and ignored stdout write failures — i.e. F1-F4 are all
+detected by the new tests.
+
+## 8. Terminal CTRL+C and idle CPU
+
+`python3 tests/pty_ctrl_c.py` runs each program on a pseudo-terminal and types the
+interrupt character (0x03), so SIGINT comes from the tty line discipline:
+
+```
+OK: odysseus terminal CTRL+C -> exit 0   (partial "STAT" typed first)
+OK: ithaca terminal CTRL+C -> exit 0
+OK: island terminal CTRL+C -> exit 0
+```
+
+Idle CPU: Ithaca, Island (Aeaea), and Odysseus (stdin held open) were started together;
+`utime + stime` from `/proc/<pid>/stat` increased by **0 ticks** for each over 3 s. All
+three then exited 0 on SIGINT.
+
+## 9. Packaging and fresh extraction
+
+On native `/tmp` (copy of this directory):
 
 ```sh
-$ tar --exclude=build --exclude=tests/valgrind-logs -cf /tmp/nostos_test.tar .
-$ tar tf /tmp/nostos_test.tar | wc -l     # 88 entries
-$ mkdir -p /tmp/fresh_extract_test && cd /tmp/fresh_extract_test
-$ tar xf /tmp/nostos_test.tar
-$ make clean && make all                  # succeeded, zero warnings
-$ ./ithaca configs/ithaca.dat data/voyages.dat   # SIGINT after 0.5s
-Ithaca initialized. 24 voyages loaded.
-Waiting for Odysseus...
-Ithaca closes the harbor.
-(exit 0)
-$ printf 'CONNECT ITHACA\nSTATUS\n' | ./odysseus configs/odysseus.dat
-Odysseus Polyphemus is ready to sail.
-$ Command OK
-$ Command OK
-$
+make package GROUP=TEST        # trial name only; the real group number is pending
+tar -tf GTEST_F1.tar | wc -l   # 92 entries; the only object file is lib/sphragis.o
+mkdir /tmp/pkgx && cd /tmp/pkgx && tar -xf GTEST_F1.tar && cd GTEST_F1
+make all                       # 0 warnings
+make test                      # 100 passed, 0 failed
+make memcheck                  # 11 clean, 0 failed
+FAULT_VALGRIND=0 make faults   # 349 passed, 0 failed
+python3 tests/pty_ctrl_c.py    # 3 OK
 ```
 
-This ran entirely from `/tmp/fresh_extract_test`, with no absolute-path access back to
-`Phase1Code/nostos` or the original `Phase1/`/`All Materials/` directories — a real
-stand-in for "extract the submitted tar on a clean machine and build/run it", short of
-an actual `G<group>_F1.tar` name (pending the real group number, assumption A15) and
-short of doing it on Montserrat itself.
+The trial archive was not kept. The real archive is `make package GROUP=<n>`.
+
+## 10. Not run / pending
+
+- **Montserrat**: nothing was run there. Before submission run §2-§8 on Montserrat.
+- **Sphragis negative-return path** (assumption A19): not reachable with the six
+  fixture islands; still untested against the real library.
+- **Real `G<group>_F1.tar`**: needs the actual group number.
+- **Instructor design validation**: not obtained (A02).

@@ -1,23 +1,23 @@
-==835== Memcheck, a memory error detector
-==835== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
-==835== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==835== Command: ./island configs/aeaea.dat /tmp/nostos_truncated.db
-==835== Parent PID: 811
-==835== 
-==835== 
-==835== FILE DESCRIPTORS: 5 open (3 std) at exit.
-==835== Open file descriptor 7: /dev/ptmx
-==835==    <inherited from parent>
-==835== 
-==835== Open file descriptor 3: /mnt/c/Users/Salah Rashwan/Desktop/UNI 2027/OS/Project/Phase1Code/nostos/tests/valgrind-logs/island_truncated_stock.log
-==835==    <inherited from parent>
-==835== 
-==835== 
-==835== HEAP SUMMARY:
-==835==     in use at exit: 0 bytes in 0 blocks
-==835==   total heap usage: 43 allocs, 43 frees, 2,171 bytes allocated
-==835== 
-==835== All heap blocks were freed -- no leaks are possible
-==835== 
-==835== For lists of detected and suppressed errors, rerun with: -s
-==835== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==6734== Memcheck, a memory error detector
+==6734== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==6734== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==6734== Command: ./island configs/aeaea.dat /tmp/tmp.VRurkO84TA/truncated.db
+==6734== Parent PID: 6253
+==6734== 
+==6734== 
+==6734== FILE DESCRIPTORS: 5 open (3 std) at exit.
+==6734== Open file descriptor 7: /dev/ptmx
+==6734==    <inherited from parent>
+==6734== 
+==6734== Open file descriptor 3: /mnt/c/Users/Salah Rashwan/Desktop/UNI 2027/OS/Project/Phase1Code/nostos/tests/valgrind-logs/island_truncated_stock.log
+==6734==    <inherited from parent>
+==6734== 
+==6734== 
+==6734== HEAP SUMMARY:
+==6734==     in use at exit: 0 bytes in 0 blocks
+==6734==   total heap usage: 41 allocs, 41 frees, 2,151 bytes allocated
+==6734== 
+==6734== All heap blocks were freed -- no leaks are possible
+==6734== 
+==6734== For lists of detected and suppressed errors, rerun with: -s
+==6734== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

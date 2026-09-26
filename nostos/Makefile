@@ -1,9 +1,16 @@
 # @File: Makefile
-# @Purpose: Builds odysseus, ithaca, and island from the reusable
-#           src/ modules plus the vendor lib/sphragis.o (island only).
-#           Default target builds all three from a clean directory.
+# @Purpose: Builds odysseus, ithaca, and island from the reusable src/
+#           modules plus the vendor lib/sphragis.o (island only). The
+#           default target builds only the three delivered executables.
+#           Test-only targets:
+#             make test      style scan + functional/loader-field suite
+#                            (rebuilds tests/bin/loader_check first)
+#             make faults    allocation/write fault-injection suite
+#             make memcheck  Valgrind suite (SIGINT, EOF, failures)
+#             make check     all of the above
+#             make package GROUP=<n>  builds G<n>_F1.tar
 # @Author: Salah Ahmed Salaheldin Adly Rashwan
-# @Date: 2026-09-21
+# @Date: 2026-09-26
 
 CC = gcc
 CPPFLAGS = -D_GNU_SOURCE -Iinclude -Ilib
@@ -13,6 +20,8 @@ LDFLAGS =
 BUILD_DIR = build
 SRC_DIR = src
 LIB_DIR = lib
+TEST_DIR = tests
+TEST_BIN = $(TEST_DIR)/bin
 
 SPHRAGIS_OBJ = $(LIB_DIR)/sphragis.o
 
@@ -28,10 +37,18 @@ ODYSSEUS_OBJS = $(addprefix $(BUILD_DIR)/,$(ODYSSEUS_SRCS:.c=.o)) $(COMMON_OBJS)
 ITHACA_OBJS = $(addprefix $(BUILD_DIR)/,$(ITHACA_SRCS:.c=.o)) $(COMMON_OBJS)
 ISLAND_OBJS = $(addprefix $(BUILD_DIR)/,$(ISLAND_SRCS:.c=.o)) $(COMMON_OBJS) $(SPHRAGIS_OBJ)
 
-ALL_STUDENT_SRCS = $(COMMON_SRCS) $(ODYSSEUS_SRCS) $(ITHACA_SRCS) $(ISLAND_SRCS)
-ALL_DEPS = $(addprefix $(BUILD_DIR)/,$(ALL_STUDENT_SRCS:.c=.d))
+# Loader modules (no entry point) shared by the test-only field checker.
+LOADER_OBJS = $(addprefix $(BUILD_DIR)/,voyages.o routes.o stock.o) $(COMMON_OBJS) $(SPHRAGIS_OBJ)
 
-.PHONY: all clean test memcheck package
+ALL_STUDENT_SRCS = $(COMMON_SRCS) $(ODYSSEUS_SRCS) $(ITHACA_SRCS) $(ISLAND_SRCS)
+ALL_DEPS = $(addprefix $(BUILD_DIR)/,$(ALL_STUDENT_SRCS:.c=.d)) \
+           $(BUILD_DIR)/loader_check.d $(BUILD_DIR)/fault_inject.d
+
+FAULT_WRAP = -Wl,--wrap=malloc,--wrap=realloc,--wrap=vasprintf,--wrap=write
+FAULT_OBJ = $(BUILD_DIR)/fault_inject.o
+FAULT_BINS = $(TEST_BIN)/odysseus-fault $(TEST_BIN)/ithaca-fault $(TEST_BIN)/island-fault
+
+.PHONY: all clean test faults memcheck check style package
 
 # Default target: build all three required executables.
 all: odysseus ithaca island
@@ -49,26 +66,51 @@ island: $(ISLAND_OBJS)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(TEST_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -I$(TEST_DIR) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR) $(TEST_BIN):
+	mkdir -p $@
 
 -include $(ALL_DEPS)
 
-# Removes only generated student objects/executables; never touches
-# the supplied lib/sphragis.o or any fixture data.
+# Test-only field checker, rebuilt whenever any loader source changes.
+$(TEST_BIN)/loader_check: $(BUILD_DIR)/loader_check.o $(LOADER_OBJS) | $(TEST_BIN)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# Test-only fault-injection builds of the three real programs.
+$(TEST_BIN)/odysseus-fault: $(ODYSSEUS_OBJS) $(FAULT_OBJ) | $(TEST_BIN)
+	$(CC) $(LDFLAGS) $(FAULT_WRAP) -o $@ $^
+
+$(TEST_BIN)/ithaca-fault: $(ITHACA_OBJS) $(FAULT_OBJ) | $(TEST_BIN)
+	$(CC) $(LDFLAGS) $(FAULT_WRAP) -o $@ $^
+
+$(TEST_BIN)/island-fault: $(ISLAND_OBJS) $(FAULT_OBJ) | $(TEST_BIN)
+	$(CC) $(LDFLAGS) $(FAULT_WRAP) -o $@ $^
+
+# Removes generated objects, executables, test binaries, and logs; never
+# touches the supplied lib/sphragis.o or any fixture data.
 clean:
 	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d odysseus ithaca island
+	rm -rf $(TEST_BIN) $(TEST_DIR)/valgrind-logs $(TEST_DIR)/fault-logs
 
-# Runs the reproducible functional test driver (see tests/).
-test: all
-	./tests/run_functional_tests.sh
+style:
+	python3 $(TEST_DIR)/style_check.py
 
-# Runs Valgrind memcheck against each executable with a fixture
-# argument set (see tests/ for the exact invocations used).
+test: all $(TEST_BIN)/loader_check style
+	./$(TEST_DIR)/run_functional_tests.sh
+
+faults: $(FAULT_BINS)
+	./$(TEST_DIR)/run_fault_tests.sh
+
 memcheck: all
-	./tests/run_memcheck.sh
+	./$(TEST_DIR)/run_memcheck.sh
 
-# Builds a fresh-extraction-ready tar archive (name left to the
-# student; see docs/audit-handoff.md section 9 for the procedure).
-package: clean all
-	@echo "Build docs/audit-handoff.md section 9 procedure to package."
+check: test faults memcheck
+
+# Builds G<GROUP>_F1.tar with a top-level directory of the same name.
+# GROUP must be the real group number; it is never guessed.
+package: clean
+	@if [ -z "$(GROUP)" ]; then echo "Usage: make package GROUP=<group number>"; exit 1; fi
+	tar --exclude='./G*_F1.tar' --transform 's,^\.,G$(GROUP)_F1,' -cf G$(GROUP)_F1.tar .
+	tar -tf G$(GROUP)_F1.tar

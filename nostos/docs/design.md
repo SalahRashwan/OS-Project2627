@@ -74,7 +74,7 @@ empty placeholders, since each entry-point file only exposes `main()`.
 | `tIslandConfig` | name, storage folder, listen endpoint, capacity, `stRoutes` (valid only) | `Island.c` main-state |
 | `tStockRecord` | `sName[100]` (raw fixed bytes, **not** guaranteed NUL-terminated), `nAmount`, `nPrice` | element of `tStockList.pstRecords` |
 | `tStockList` | `pstRecords`, `nCount`, `nCapacity` | `Island.c` main-state |
-| `tParsedCommand` | `eKind`, `psArg1` (owned, may be NULL), `lNumber`, `bHasNumber` | one terminal iteration; destroyed immediately after the result is printed |
+| `tParsedCommand` | `eKind`, `psArg1` (owned, may be NULL), `lNumber`, `nHasNumber` | one terminal iteration; destroyed immediately after the result is printed |
 | `tUsageMessage` | up to 2 **borrowed** `const char *` literals + count | one terminal iteration; nothing to free (string literals) |
 
 Ownership rules applied uniformly (guide Section 5.2):
@@ -153,7 +153,9 @@ it, classifies the first token against the eleven verbs case-insensitively via e
 `strcasecmp` (never a prefix match, so `MAPS`/`ACCEPTED`/`BUYER` fall through to
 `Unknown command`), validates arity/second-word/numeric fields per the table in
 `PHASE1_IMPLEMENTATION_GUIDE.md` Section 11.2, and returns one of
-`PARSE_OK` / `PARSE_UNKNOWN` / `PARSE_USAGE` / `PARSE_EMPTY`. It never touches a file
+`PARSE_OK` / `PARSE_UNKNOWN` / `PARSE_USAGE` / `PARSE_EMPTY`, or `PARSE_ERROR` when one of
+its own allocations fails (reported by `Odysseus.c` as a resource error on stderr, never
+as `Unknown command`; `PARSE_UNKNOWN` is reserved for an unrecognized verb). It never touches a file
 descriptor and never inspects voyage/route/market state — Phase 1 explicitly forbids that
 (P p.19). All *printing* (`Command OK\n`, `Unknown command\n`, one or two `Usage:` lines)
 happens in `Odysseus.c`'s terminal loop, which is the only place descriptor writes happen

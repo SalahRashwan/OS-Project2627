@@ -108,22 +108,30 @@ Back in your main terminal:
 make test
 ```
 
-This runs 60 scripted checks (official test-sheet cases, the full edge-case matrix,
-loader failure paths) automatically and prints `Summary: 60 passed, 0 failed` at the
-end. Any `FAIL:` line will show you exactly what was expected vs. what actually
-happened.
+This first runs the style scan (expect `style_check: 0 finding(s)`), then 100 scripted
+checks (official test-sheet cases, the full edge-case matrix, exit statuses, SIGINT
+shutdown of every program, and field-by-field loader comparisons) and prints
+`Summary: 100 passed, 0 failed` at the end. Any `FAIL:` line shows what was expected
+vs. what actually happened.
 
 ## 7. Run Valgrind (memory/descriptor leak checking)
 
 ```sh
 sudo apt install valgrind      # only if not already installed
 make memcheck
+make faults                    # slow (several minutes): every allocation failure
 ```
 
-This starts each binary, lets it run, sends it a real `SIGINT`, and checks the resulting
-Valgrind log for leaks/errors. Expect six `OK:` lines. Logs are saved under
-`tests/valgrind-logs/*.log` if you want to inspect one directly — look for
-`ERROR SUMMARY: 0 errors` and `All heap blocks were freed`.
+`make memcheck` holds Odysseus's stdin open (so the test really exercises CTRL+C, not
+EOF), buffers a partial command, sends `SIGINT`, and requires exit 0; it does the same
+for Ithaca and two islands, plus an EOF run and six failure paths. Expect eleven `OK:`
+lines. Each log must show `ERROR SUMMARY: 0 errors`, `in use at exit: 0 bytes`, and no
+open descriptor other than 0-2 or inherited ones (Valgrind's own log file appears as an
+inherited descriptor; that is expected).
+
+`make faults` makes each allocation call fail in turn, and each stdout write fail, and
+checks that every program either succeeds completely or exits 2 with an error message,
+never crashing, leaking, or misreporting a valid command as `Unknown command`.
 
 ## 8. (Optional) Try breaking it on purpose
 

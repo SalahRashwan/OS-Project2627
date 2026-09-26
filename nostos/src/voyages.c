@@ -2,13 +2,8 @@
  * @File: voyages.c
  * @Purpose: Loader and destructor for Ithaca's voyages.dat file.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
-
-/* System */
-#include <limits.h>
-#include <stdlib.h>
-#include <unistd.h>
 
 /* Own */
 #include "voyages.h"
@@ -19,7 +14,7 @@
 /***********************************************
  * @Name: initVoyageList
  * @Def: Resets a voyage list to a safe, destroyable empty state.
- * @Arg: Out: pstList.
+ * @Arg: Out: pstList = list to reset (no allocation is freed).
  * @Ret: None.
  ***********************************************/
 static void initVoyageList(tVoyageList *pstList) {
@@ -30,7 +25,9 @@ static void initVoyageList(tVoyageList *pstList) {
 
 /***********************************************
  * @Name: destroyVoyageList
- * @Def: See voyages.h.
+ * @Def: Frees every owned string in every voyage and the array itself.
+ * @Arg: In/Out: pstList = list to release.
+ * @Ret: None.
  ***********************************************/
 void destroyVoyageList(tVoyageList *pstList) {
     int nIndex = 0;
@@ -51,10 +48,10 @@ void destroyVoyageList(tVoyageList *pstList) {
  * @Def: Appends one already-owned voyage to a growable voyage list.
  * @Arg: In/Out: pstList = list to grow.
  *       In: pstVoyage = voyage to move into the list on success.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int voyageListAppend(tVoyageList *pstList, const tVoyage *pstVoyage) {
-    tVoyage *pTemp = NULL;
+    tVoyage *pstTemp = NULL;
     int nNewCapacity = 0;
 
     if (pstList->nCount == pstList->nCapacity) {
@@ -63,11 +60,11 @@ static int voyageListAppend(tVoyageList *pstList, const tVoyage *pstVoyage) {
         } else {
             nNewCapacity = pstList->nCapacity * 2;
         }
-        pTemp = realloc(pstList->pstVoyages, (size_t) nNewCapacity * sizeof(tVoyage));
-        if (NULL == pTemp) {
+        pstTemp = realloc(pstList->pstVoyages, (size_t) nNewCapacity * sizeof(tVoyage));
+        if (NULL == pstTemp) {
             return NOSTOS_ERROR;
         }
-        pstList->pstVoyages = pTemp;
+        pstList->pstVoyages = pstTemp;
         pstList->nCapacity = nNewCapacity;
     }
     pstList->pstVoyages[pstList->nCount] = *pstVoyage;
@@ -82,7 +79,7 @@ static int voyageListAppend(tVoyageList *pstList, const tVoyage *pstVoyage) {
  * @Arg: In/Out: psLine = mutable line to tokenize.
  *       In: nNextId = identifier to assign to this record.
  *       Out: pstVoyage = filled on success.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int parseVoyageLine(char *psLine, int nNextId, tVoyage *pstVoyage) {
     char **appsTokens = NULL;
@@ -92,7 +89,7 @@ static int parseVoyageLine(char *psLine, int nNextId, tVoyage *pstVoyage) {
     if (NOSTOS_OK != tokenizeLine(psLine, &appsTokens, &nTokenCount)) {
         return NOSTOS_ERROR;
     }
-    if (4 != nTokenCount || NOSTOS_OK != parseDigitsToLong(appsTokens[3], &lReward) || lReward > INT_MAX) {
+    if (4 != nTokenCount || NOSTOS_OK != parseDigitsToLong(appsTokens[3], &lReward) || INT_MAX < lReward) {
         free(appsTokens);
         return NOSTOS_ERROR;
     }
@@ -114,7 +111,9 @@ static int parseVoyageLine(char *psLine, int nNextId, tVoyage *pstVoyage) {
 /***********************************************
  * @Name: failVoyages
  * @Def: Single cleanup path for a failed voyages.dat load.
- * @Arg: In: nFd, In/Out: pstBuffer, pstList.
+ * @Arg: In: nFd = descriptor to close.
+ *       In/Out: pstBuffer = line accumulator to release.
+ *       In/Out: pstList = partially loaded voyage list to release.
  * @Ret: NOSTOS_ERROR, always.
  ***********************************************/
 static int failVoyages(int nFd, tLineBuffer *pstBuffer, tVoyageList *pstList) {
@@ -128,8 +127,10 @@ static int failVoyages(int nFd, tLineBuffer *pstBuffer, tVoyageList *pstList) {
  * @Name: loadVoyageRecords
  * @Def: Reads every voyage line until EOF, skipping blank lines and
  *       assigning sequential internal identifiers in file order.
- * @Arg: In: nFd, In/Out: pstBuffer, Out: pstList.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: nFd = open voyages.dat descriptor.
+ *       In/Out: pstBuffer = line accumulator.
+ *       Out: pstList = receives every voyage in file order.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int loadVoyageRecords(int nFd, tLineBuffer *pstBuffer, tVoyageList *pstList) {
     char *psLine = NULL;
@@ -164,7 +165,12 @@ static int loadVoyageRecords(int nFd, tLineBuffer *pstBuffer, tVoyageList *pstLi
 
 /***********************************************
  * @Name: loadVoyages
- * @Def: See voyages.h.
+ * @Def: Opens, parses, and closes a voyages.dat file. Blank lines are
+ *       skipped; any line with a token count other than 0 or 4 is a
+ *       malformed-file error.
+ * @Arg: In: psPath = path to the voyages file.
+ *       Out: pstList = filled on success; safe to destroy on failure.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR otherwise.
  ***********************************************/
 int loadVoyages(const char *psPath, tVoyageList *pstList) {
     int nFd = -1;

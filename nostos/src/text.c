@@ -4,15 +4,8 @@
  *           numeric parsing, and owned-string duplication shared by
  *           every loader and by the Odysseus terminal loop.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
-
-/* System */
-#include <ctype.h>
-#include <errno.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
 
 /* Own */
 #include "text.h"
@@ -27,7 +20,9 @@
 
 /***********************************************
  * @Name: lineBufferInit
- * @Def: See text.h.
+ * @Def: Initializes an empty line buffer, safe to destroy immediately.
+ * @Arg: Out: pstBuffer = buffer to initialize.
+ * @Ret: None.
  ***********************************************/
 void lineBufferInit(tLineBuffer *pstBuffer) {
     pstBuffer->psData = NULL;
@@ -37,7 +32,9 @@ void lineBufferInit(tLineBuffer *pstBuffer) {
 
 /***********************************************
  * @Name: lineBufferDestroy
- * @Def: See text.h.
+ * @Def: Frees the owned storage of a line buffer and resets its fields.
+ * @Arg: In/Out: pstBuffer = buffer to release; safe on a zeroed buffer.
+ * @Ret: None.
  ***********************************************/
 void lineBufferDestroy(tLineBuffer *pstBuffer) {
     free(pstBuffer->psData);
@@ -52,11 +49,11 @@ void lineBufferDestroy(tLineBuffer *pstBuffer) {
  *       small initial size. Private helper, not declared in text.h.
  * @Arg: In/Out: pstBuffer = buffer to grow.
  *       In: nNeeded = minimum total capacity required.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int lineBufferGrow(tLineBuffer *pstBuffer, size_t nNeeded) {
     size_t nNewCapacity = 0;
-    char *pTemp = NULL;
+    char *psTemp = NULL;
 
     if (nNeeded <= pstBuffer->nCapacity) {
         return NOSTOS_OK;
@@ -69,18 +66,23 @@ static int lineBufferGrow(tLineBuffer *pstBuffer, size_t nNeeded) {
     while (nNewCapacity < nNeeded) {
         nNewCapacity *= 2;
     }
-    pTemp = realloc(pstBuffer->psData, nNewCapacity);
-    if (NULL == pTemp) {
+    psTemp = realloc(pstBuffer->psData, nNewCapacity);
+    if (NULL == psTemp) {
         return NOSTOS_ERROR;
     }
-    pstBuffer->psData = pTemp;
+    pstBuffer->psData = psTemp;
     pstBuffer->nCapacity = nNewCapacity;
     return NOSTOS_OK;
 }
 
 /***********************************************
  * @Name: lineBufferAppend
- * @Def: See text.h.
+ * @Def: Appends raw bytes to the buffer, growing storage geometrically.
+ * @Arg: In/Out: pstBuffer = buffer to grow.
+ *       In: pData = bytes to append.
+ *       In: nLen = number of bytes to append.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on allocation failure (the
+ *       buffer's previous contents remain valid and owned).
  ***********************************************/
 int lineBufferAppend(tLineBuffer *pstBuffer, const char *pData, size_t nLen) {
     if (NOSTOS_OK != lineBufferGrow(pstBuffer, pstBuffer->nLength + nLen)) {
@@ -98,7 +100,7 @@ int lineBufferAppend(tLineBuffer *pstBuffer, const char *pData, size_t nLen) {
  * @Arg: In: pData = source bytes.
  *       In: nLen = number of bytes.
  *       Out: ppsLine = set to the owned copy on success.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int makeOwnedLine(const char *pData, size_t nLen, char **ppsLine) {
     char *psLine = malloc(nLen + 1);
@@ -114,7 +116,12 @@ static int makeOwnedLine(const char *pData, size_t nLen, char **ppsLine) {
 
 /***********************************************
  * @Name: lineBufferExtractLine
- * @Def: See text.h.
+ * @Def: Removes and returns one complete newline-terminated line from
+ *       the front of the buffer, normalizing a trailing CRLF to nothing.
+ * @Arg: In/Out: pstBuffer = buffer to consume from.
+ *       Out: ppsLine = set to a newly owned, NUL-terminated line on
+ *            LINE_FOUND; left untouched otherwise.
+ * @Ret: LINE_FOUND, LINE_NONE, or NOSTOS_ERROR on allocation failure.
  ***********************************************/
 int lineBufferExtractLine(tLineBuffer *pstBuffer, char **ppsLine) {
     size_t nIndex = 0;
@@ -141,7 +148,12 @@ int lineBufferExtractLine(tLineBuffer *pstBuffer, char **ppsLine) {
 
 /***********************************************
  * @Name: lineBufferTakeRemainder
- * @Def: See text.h.
+ * @Def: Takes whatever bytes remain (no trailing newline) as one final
+ *       line; intended to run exactly once after EOF.
+ * @Arg: In/Out: pstBuffer = buffer to drain.
+ *       Out: ppsLine = set to a newly owned, NUL-terminated line on
+ *            LINE_FOUND; left untouched otherwise.
+ * @Ret: LINE_FOUND, LINE_NONE (buffer already empty), or NOSTOS_ERROR.
  ***********************************************/
 int lineBufferTakeRemainder(tLineBuffer *pstBuffer, char **ppsLine) {
     int nStatus = NOSTOS_ERROR;
@@ -159,7 +171,16 @@ int lineBufferTakeRemainder(tLineBuffer *pstBuffer, char **ppsLine) {
 
 /***********************************************
  * @Name: readNextLine
- * @Def: See text.h.
+ * @Def: Reads and returns the next complete line from a descriptor,
+ *       accumulating raw chunks into pstBuffer across calls. Adapts the
+ *       delimiter-reading concept taught in Sockets/client.c into a
+ *       safe, bounded-growth, EOF/error-distinguishing form.
+ * @Arg: In: nFd = descriptor to read from (a regular file).
+ *       In/Out: pstBuffer = accumulator buffer, reused across calls.
+ *       Out: ppsLine = set to a newly owned line on LINE_FOUND.
+ * @Ret: LINE_FOUND (a line, possibly the final unterminated one, was
+ *       produced), LINE_EOF (clean end of file, nothing left), or
+ *       NOSTOS_ERROR on a read or allocation failure.
  ***********************************************/
 int readNextLine(int nFd, tLineBuffer *pstBuffer, char **ppsLine) {
     char acChunk[READ_CHUNK_SIZE];
@@ -196,7 +217,13 @@ int readNextLine(int nFd, tLineBuffer *pstBuffer, char **ppsLine) {
 
 /***********************************************
  * @Name: tokenizeLine
- * @Def: See text.h.
+ * @Def: Splits a mutable line in place on spaces/tabs using strtok_r.
+ * @Arg: In/Out: psLine = line to tokenize; modified with embedded NULs.
+ *       Out: pappsTokens = set to a newly owned array of pointers that
+ *            borrow into psLine (do not outlive it; duplicate what must
+ *            survive).
+ *       Out: pnTokenCount = number of tokens found (may be 0).
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on allocation failure.
  ***********************************************/
 int tokenizeLine(char *psLine, char ***pappsTokens, int *pnTokenCount) {
     char **appsTokens = NULL;
@@ -204,7 +231,7 @@ int tokenizeLine(char *psLine, char ***pappsTokens, int *pnTokenCount) {
     int nCount = 0;
     char *psSavePtr = NULL;
     char *psToken = NULL;
-    char **pTemp = NULL;
+    char **appsTemp = NULL;
 
     psToken = strtok_r(psLine, " \t", &psSavePtr);
     while (NULL != psToken) {
@@ -214,12 +241,12 @@ int tokenizeLine(char *psLine, char ***pappsTokens, int *pnTokenCount) {
             } else {
                 nCapacity = nCapacity * 2;
             }
-            pTemp = realloc(appsTokens, nCapacity * sizeof(char *));
-            if (NULL == pTemp) {
+            appsTemp = realloc(appsTokens, nCapacity * sizeof(char *));
+            if (NULL == appsTemp) {
                 free(appsTokens);
                 return NOSTOS_ERROR;
             }
-            appsTokens = pTemp;
+            appsTokens = appsTemp;
         }
         appsTokens[nCount] = psToken;
         nCount++;
@@ -232,7 +259,12 @@ int tokenizeLine(char *psLine, char ***pappsTokens, int *pnTokenCount) {
 
 /***********************************************
  * @Name: parseDigitsToLong
- * @Def: See text.h.
+ * @Def: Parses a token as an unsigned, digit-only decimal integer.
+ *       Signs, decimal points, exponents, leading/trailing junk, empty
+ *       tokens, and out-of-range values are all rejected.
+ * @Arg: In: psToken = token to parse.
+ *       Out: plValue = parsed value, set only on success.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR otherwise.
  ***********************************************/
 int parseDigitsToLong(const char *psToken, long *plValue) {
     const char *psCursor = NULL;
@@ -261,7 +293,9 @@ int parseDigitsToLong(const char *psToken, long *plValue) {
 
 /***********************************************
  * @Name: duplicateString
- * @Def: See text.h.
+ * @Def: Allocates and returns an owned copy of a NUL-terminated string.
+ * @Arg: In: psSource = string to copy; must not be NULL.
+ * @Ret: A newly owned copy, or NULL on allocation failure.
  ***********************************************/
 char *duplicateString(const char *psSource) {
     size_t nLen = 0;

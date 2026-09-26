@@ -6,13 +6,8 @@
  *           signal is only ever observed by reading a signalfd inside
  *           an ordinary blocking poll().
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
-
-/* System */
-#include <errno.h>
-#include <poll.h>
-#include <sys/signalfd.h>
 
 /* Own */
 #include "lifecycle.h"
@@ -21,7 +16,13 @@
 
 /***********************************************
  * @Name: blockSigint
- * @Def: See lifecycle.h.
+ * @Def: Blocks SIGINT for the calling process so it is queued, never
+ *       delivered as a handler interruption, and never lost between
+ *       initialization steps.
+ * @Arg: Out: pstOldMask = the previous signal mask (kept for reference;
+ *       the process exits instead of restoring it).
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR if the mask could not be
+ *       built or installed.
  ***********************************************/
 int blockSigint(sigset_t *pstOldMask) {
     sigset_t stSet;
@@ -40,7 +41,11 @@ int blockSigint(sigset_t *pstOldMask) {
 
 /***********************************************
  * @Name: createSigintFd
- * @Def: See lifecycle.h.
+ * @Def: Creates a close-on-exec signalfd bound to a set containing only
+ *       SIGINT. Must be called after blockSigint().
+ * @Arg: None.
+ * @Ret: An open descriptor on success (owned by the caller, closed once
+ *       during cleanup), or -1 on failure.
  ***********************************************/
 int createSigintFd(void) {
     sigset_t stSet;
@@ -56,7 +61,11 @@ int createSigintFd(void) {
 
 /***********************************************
  * @Name: consumeSignal
- * @Def: See lifecycle.h.
+ * @Def: Reads and discards exactly one struct signalfd_siginfo from a
+ *       ready signalfd, so the pending SIGINT is accepted.
+ * @Arg: In: nSigFd = a signalfd that poll() reported as readable.
+ * @Ret: NOSTOS_OK if one complete record was read, NOSTOS_ERROR on a
+ *       read failure or a short read.
  ***********************************************/
 int consumeSignal(int nSigFd) {
     struct signalfd_siginfo stInfo;
@@ -71,7 +80,12 @@ int consumeSignal(int nSigFd) {
 
 /***********************************************
  * @Name: waitForSignalOnly
- * @Def: See lifecycle.h.
+ * @Def: Blocks in poll() on exactly one descriptor (the signalfd) with
+ *       an infinite timeout, then consumes the pending signal. Used by
+ *       Ithaca and Island, which have no terminal to also watch.
+ * @Arg: In: nSigFd = descriptor from createSigintFd().
+ * @Ret: NOSTOS_OK once SIGINT has been consumed, NOSTOS_ERROR on a
+ *       poll or read failure, or if the descriptor reports an error.
  ***********************************************/
 int waitForSignalOnly(int nSigFd) {
     struct pollfd stPoll;
@@ -88,8 +102,11 @@ int waitForSignalOnly(int nSigFd) {
             }
             return NOSTOS_ERROR;
         }
-        if (0 < nReady && 0 != (stPoll.revents & POLLIN)) {
+        if (0 != (stPoll.revents & POLLIN)) {
             return consumeSignal(nSigFd);
+        }
+        if (0 != (stPoll.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+            return NOSTOS_ERROR;
         }
     }
 }

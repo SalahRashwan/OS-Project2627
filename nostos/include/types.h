@@ -123,12 +123,16 @@ typedef enum {
     CMD_EMPTY
 } eCommandKind;
 
-/* Overall parse result: what the terminal loop must print. */
+/* Overall parse result: what the terminal loop must print. PARSE_UNKNOWN
+ * is reserved for an unrecognized verb; PARSE_ERROR means the parser
+ * itself could not allocate memory, so no classification is available
+ * and the terminal must report a resource failure instead. */
 typedef enum {
     PARSE_OK,
     PARSE_UNKNOWN,
     PARSE_USAGE,
-    PARSE_EMPTY
+    PARSE_EMPTY,
+    PARSE_ERROR
 } eParseStatus;
 
 /* One parsed command line. psArg1 is an owned copy (product/island token)
@@ -138,7 +142,7 @@ typedef struct {
     eCommandKind eKind;
     char *psArg1;
     long lNumber;
-    int bHasNumber;
+    int nHasNumber;
 } tParsedCommand;
 
 /* Up to two usage lines to print (LIST's ambiguous-subcommand case needs

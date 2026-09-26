@@ -7,12 +7,8 @@
  *           each survivor's original IP/port restored. Never guesses,
  *           hardcodes, or bypasses the real library's decision.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
-
-/* System */
-#include <stdlib.h>
-#include <string.h>
 
 /* Own */
 #include "routes.h"
@@ -49,7 +45,7 @@ static void freeTempNames(char **appsNames, int nCount) {
  * @Arg: In: pstRawRoutes = source raw routes.
  *       Out: pappsTempNames = set to a newly owned array (or NULL for
  *            zero raw routes) on success.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int buildTempNames(const tRouteList *pstRawRoutes, char ***pappsTempNames) {
     char **appsTemp = NULL;
@@ -82,8 +78,10 @@ static int buildTempNames(const tRouteList *pstRawRoutes, char ***pappsTempNames
  * @Def: Case-insensitively finds a raw route by destination name, to
  *       recover the IP/port endpoint the library itself does not
  *       track.
- * @Arg: In: pstRawRoutes, psName.
- * @Ret: A borrowed pointer to the matching raw route, or NULL.
+ * @Arg: In: pstRawRoutes = raw routes to search.
+ *       In: psName = surviving destination name to match.
+ * @Ret: A borrowed pointer to the matching raw route, or NULL if no raw
+ *       route has that name.
  ***********************************************/
 static const tRoute *findRawRouteByName(const tRouteList *pstRawRoutes, const char *psName) {
     int nIndex = 0;
@@ -109,7 +107,7 @@ static const tRoute *findRawRouteByName(const tRouteList *pstRawRoutes, const ch
  *            NULL so the caller's final cleanup pass never double-frees.
  *       In: nRawCount = number of slots in appsTempNames.
  *       Out: pstValidRoutes = grown with each matched survivor.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on failure.
  ***********************************************/
 static int collectSurvivors(const tRouteList *pstRawRoutes, char **appsTempNames, int nRawCount, tRouteList *pstValidRoutes) {
     int nIndex = 0;
@@ -139,7 +137,17 @@ static int collectSurvivors(const tRouteList *pstRawRoutes, char **appsTempNames
 
 /***********************************************
  * @Name: filterIslandRoutes
- * @Def: See routes.h.
+ * @Def: Validates an island's raw candidate routes using the real
+ *       SPHRAGIS_filter_island_configuration() on an independent array
+ *       of heap-allocated name copies, then rebuilds a fresh, owned list
+ *       of exactly the surviving destinations with their original
+ *       IP/port endpoints. The raw list is never mutated.
+ * @Arg: In: psIslandName = island being validated (borrowed).
+ *       In: pstRawRoutes = unvalidated candidate routes from island.dat.
+ *       Out: pstValidRoutes = surviving routes on success; empty and
+ *            safe to destroy on failure.
+ * @Ret: The new nonnegative valid route count on success, or a negative
+ *       SPHRAGIS_ERROR_* / NOSTOS_ERROR code on failure.
  ***********************************************/
 int filterIslandRoutes(const char *psIslandName, const tRouteList *pstRawRoutes, tRouteList *pstValidRoutes) {
     char **appsTempNames = NULL;

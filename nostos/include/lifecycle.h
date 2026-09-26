@@ -14,7 +14,10 @@
  */
 
 /* System Includes */
+#include <errno.h>
+#include <poll.h>
 #include <signal.h>
+#include <sys/signalfd.h>
 
 /***********************************************
  * @Name: blockSigint

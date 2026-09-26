@@ -10,7 +10,13 @@
  * @Date: 2026-09-21
  */
 
-/* Own */
+/* System Includes */
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/* Project Includes */
 #include "types.h"
 
 /* On-disk record layout: 100 name bytes, then two little-endian signed

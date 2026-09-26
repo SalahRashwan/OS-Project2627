@@ -5,3 +5,9 @@ nostos/ithaca
 nostos/island
 nostos/tests/loader_check
 *.tar
+nostos/tests/bin/
+nostos/tests/fault-logs/
+
+# Local assistant context files
+CLAUDE.md
+**/CLAUDE.md

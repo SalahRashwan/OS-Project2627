@@ -12,7 +12,13 @@
  * @Date: 2026-09-21
  */
 
-/* Own */
+/* System Includes */
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+
+/* Project Includes */
 #include "types.h"
 
 /* Exact required result lines (P p.15-18; official test sheet T p.2). */
@@ -44,7 +50,10 @@
  *            PARSE_OK, must be released with destroyParsedCommand().
  *       Out: pstUsage = filled with one or two borrowed usage lines
  *            on PARSE_USAGE; untouched otherwise.
- * @Ret: PARSE_OK, PARSE_UNKNOWN, PARSE_USAGE, or PARSE_EMPTY.
+ * @Ret: PARSE_OK (valid command), PARSE_UNKNOWN (unrecognized verb),
+ *       PARSE_USAGE (recognized verb, invalid syntax), PARSE_EMPTY
+ *       (blank line), or PARSE_ERROR (memory allocation failed while
+ *       parsing; nothing owned is left in pstCommand).
  ***********************************************/
 eParseStatus parseCommand(const char *psLine, tParsedCommand *pstCommand, tUsageMessage *pstUsage);
 

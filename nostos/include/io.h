@@ -11,8 +11,16 @@
  */
 
 /* System Includes */
+#include <errno.h>
+#include <fcntl.h>
 #include <stdarg.h>
+/* stdio.h is included only for the in-memory formatter vasprintf(); no
+ * stdio stream I/O function is used anywhere in the authored code. */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 /***********************************************
  * @Name: writeAll

@@ -10,7 +10,7 @@
  *           releasing every owned resource before exiting. Island has
  *           no interactive terminal (P p.17).
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-26
  */
 
 #include "Island.h"
@@ -21,9 +21,11 @@
  *       the routes through the real Sphragis adapter before they are
  *       ever considered valid. Self-cleaning: on any failure the
  *       island configuration is fully released before returning.
- * @Arg: In: psConfigPath. Out: pstConfig (its stRoutes becomes the
- *       valid, post-filter list on success).
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: psConfigPath = path to the island configuration.
+ *       Out: pstConfig = loaded configuration; its stRoutes becomes the
+ *            valid, post-filter list on success.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR on load or Sphragis
+ *       failure (configuration already released).
  ***********************************************/
 static int loadIslandRoutesFiltered(const char *psConfigPath, tIslandConfig *pstConfig) {
     tRouteList stRawRoutes;
@@ -46,9 +48,13 @@ static int loadIslandRoutesFiltered(const char *psConfigPath, tIslandConfig *pst
  * @Def: Blocks SIGINT, creates its signalfd, loads and filters the
  *       island configuration, then loads its binary stock, in that
  *       order. Each stage releases only what it itself acquired.
- * @Arg: In: psConfigPath, psStockPath.
- *       Out: pnSigFd, pstConfig, pstStock.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: psConfigPath = path to the island configuration.
+ *       In: psStockPath = path to the binary stock file.
+ *       Out: pnSigFd = open signalfd on success.
+ *       Out: pstConfig = loaded, filtered configuration on success.
+ *       Out: pstStock = loaded stock list on success.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR otherwise (nothing is left
+ *       allocated or open).
  ***********************************************/
 static int initializeIsland(const char *psConfigPath, const char *psStockPath, int *pnSigFd,
                              tIslandConfig *pstConfig, tStockList *pstStock) {
@@ -63,11 +69,13 @@ static int initializeIsland(const char *psConfigPath, const char *psStockPath, i
     }
     if (NOSTOS_OK != loadIslandRoutesFiltered(psConfigPath, pstConfig)) {
         close(*pnSigFd);
+        *pnSigFd = -1;
         return NOSTOS_ERROR;
     }
     if (NOSTOS_OK != loadStockList(psStockPath, pstStock)) {
         destroyIslandConfig(pstConfig);
         close(*pnSigFd);
+        *pnSigFd = -1;
         return NOSTOS_ERROR;
     }
     return NOSTOS_OK;
@@ -78,8 +86,9 @@ static int initializeIsland(const char *psConfigPath, const char *psStockPath, i
  * @Def: Prints the required startup messages with the actual loaded
  *       capacity/route/product counts (never a hardcoded fixture
  *       count).
- * @Arg: In: pstConfig, pstStock.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ * @Arg: In: pstConfig = loaded configuration (name, capacity, routes).
+ *       In: pstStock = loaded stock list (product count).
+ * @Ret: NOSTOS_OK if every line was written, NOSTOS_ERROR otherwise.
  ***********************************************/
 static int announceIslandReady(const tIslandConfig *pstConfig, const tStockList *pstStock) {
     if (NOSTOS_OK != writeFormatted(STDOUT_FILENO, "Island %s initialized.\n", pstConfig->psName)) {
@@ -98,19 +107,25 @@ static int announceIslandReady(const tIslandConfig *pstConfig, const tStockList 
  * @Name: runIslandLifecycle
  * @Def: Announces readiness, blocks until CTRL+C, prints the shutdown
  *       message, and releases every owned resource exactly once,
- *       regardless of which stage failed.
- * @Arg: In: nSigFd. In/Out: pstConfig, pstStock.
- * @Ret: NOSTOS_OK / NOSTOS_ERROR.
+ *       regardless of which stage failed. Each failure is reported with
+ *       one fixed stderr literal (no allocation, no retry).
+ * @Arg: In: nSigFd = signalfd created during initialization; closed.
+ *       In/Out: pstConfig = configuration (with valid routes) to release.
+ *       In/Out: pstStock = stock list to release.
+ * @Ret: NOSTOS_OK after a clean CTRL+C shutdown, NOSTOS_ERROR if a
+ *       message could not be written or the signal wait failed.
  ***********************************************/
 static int runIslandLifecycle(int nSigFd, tIslandConfig *pstConfig, tStockList *pstStock) {
-    int nStatus = NOSTOS_OK;
+    int nStatus = NOSTOS_ERROR;
 
     if (NOSTOS_OK != announceIslandReady(pstConfig, pstStock)) {
-        nStatus = NOSTOS_ERROR;
+        (void) writeString(STDERR_FILENO, ERROR_ISLAND_WRITE);
     } else if (NOSTOS_OK != waitForSignalOnly(nSigFd)) {
-        nStatus = NOSTOS_ERROR;
+        (void) writeString(STDERR_FILENO, ERROR_ISLAND_SIGNAL);
+    } else if (NOSTOS_OK != writeFormatted(STDOUT_FILENO, "%s closes its port.\n", pstConfig->psName)) {
+        (void) writeString(STDERR_FILENO, ERROR_ISLAND_WRITE);
     } else {
-        writeFormatted(STDOUT_FILENO, "%s closes its port.\n", pstConfig->psName);
+        nStatus = NOSTOS_OK;
     }
     destroyStockList(pstStock);
     destroyIslandConfig(pstConfig);
@@ -125,7 +140,9 @@ static int runIslandLifecycle(int nSigFd, tIslandConfig *pstConfig, tStockList *
  *       (assumption A21).
  * @Arg: In: argc = argument count.
  *       In: argv[1] = config.dat path, argv[2] = stock.db path.
- * @Ret: NOSTOS_EXIT_OK / NOSTOS_EXIT_ARGS / NOSTOS_EXIT_IO.
+ * @Ret: NOSTOS_EXIT_OK after a clean CTRL+C shutdown, NOSTOS_EXIT_ARGS on
+ *       a wrong argument count, NOSTOS_EXIT_IO on any initialization,
+ *       I/O, or allocation failure.
  ***********************************************/
 int main(int argc, char *argv[]) {
     int nSigFd = -1;
@@ -133,11 +150,11 @@ int main(int argc, char *argv[]) {
     tStockList stStock;
 
     if (3 != argc) {
-        writeString(STDERR_FILENO, "Usage: island <config.dat> <stock.db>\n");
+        (void) writeString(STDERR_FILENO, "Usage: island <config.dat> <stock.db>\n");
         return NOSTOS_EXIT_ARGS;
     }
     if (NOSTOS_OK != initializeIsland(argv[1], argv[2], &nSigFd, &stConfig, &stStock)) {
-        writeString(STDERR_FILENO, "Error: Island failed to initialize.\n");
+        (void) writeString(STDERR_FILENO, "Error: Island failed to initialize.\n");
         return NOSTOS_EXIT_IO;
     }
     if (NOSTOS_OK != runIslandLifecycle(nSigFd, &stConfig, &stStock)) {
