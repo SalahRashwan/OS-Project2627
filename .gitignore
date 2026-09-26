@@ -1,0 +1,7 @@
+# Build outputs (regenerate with `make`)
+nostos/build/
+nostos/odysseus
+nostos/ithaca
+nostos/island
+nostos/tests/loader_check
+*.tar

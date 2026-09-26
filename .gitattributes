@@ -1,0 +1,5 @@
+# Keep Unix line endings so the code builds and scripts run on Linux/Montserrat
+* text=auto eol=lf
+*.o binary
+*.db binary
+*.png binary
