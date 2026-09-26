@@ -74,7 +74,7 @@ in Phase 1.
 Each island's `--- ROUTES ---` section lists the other five islands as *candidate*
 routes with distinct IP/port pairs; the real `SPHRAGIS_filter_island_configuration()`
 decides which survive. No topology is hardcoded or guessed — see
-`docs/audit-handoff.md` for the observed (real, library-decided) survivor counts per
+`docs/test-results.md` §5 for the observed (real, library-decided) survivor counts per
 island, all of which cross-check as bidirectional.
 
 ## Commands (Phase 1: syntax-only)
@@ -139,8 +139,6 @@ newline is either executed or reported, never dropped.
   encountered, pending fields).
 - `docs/test-results.md` — exact commands run, platform/compiler versions, actual
   captured results, and what remains unrun (Montserrat verification).
-- `docs/audit-handoff.md` — requirement-to-file/function mapping and evidence index for
-  an independent reviewer.
 
 ## What is intentionally not here
 
