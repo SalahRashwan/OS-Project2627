@@ -12,7 +12,7 @@
  *           failure is reported on stderr and ends the process with a
  *           failure status after releasing its resources.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-26
+ * @Date: 2026-09-29
  */
 
 #include "Odysseus.h"
@@ -290,20 +290,26 @@ static int runOdysseusTerminal(int nSigFd) {
 
 /***********************************************
  * @Name: main
- * @Def: Entry point. Validates the CLI argument count, initializes,
- *       prints the readiness message, runs the terminal, releases every
- *       owned resource, and returns the exit status
+ * @Def: Entry point. Ignores SIGPIPE before any write (so even the
+ *       usage message cannot kill the process), validates the CLI
+ *       argument count, initializes, prints the readiness message, runs
+ *       the terminal, releases every owned resource, and returns the
+ *       exit status.
  * @Arg: In: argc = argument count.
  *       In: argv = argument vector; argv[1] = odysseus.dat path.
  * @Ret: NOSTOS_EXIT_OK on CTRL+C/EOF, NOSTOS_EXIT_ARGS on a wrong
- *       argument count, NOSTOS_EXIT_IO on any initialization, I/O, or
- *       allocation failure.
+ *       argument count, NOSTOS_EXIT_IO on a SIGPIPE setup failure or on
+ *       any initialization, I/O, or allocation failure.
  ***********************************************/
 int main(int argc, char *argv[]) {
     int nSigFd = -1;
     tOdysseusConfig stConfig;
     int nStatus = NOSTOS_OK;
 
+    if (NOSTOS_OK != ignoreSigpipe()) {
+        (void) writeString(STDERR_FILENO, ERROR_SIGPIPE_SETUP);
+        return NOSTOS_EXIT_IO;
+    }
     if (2 != argc) {
         (void) writeString(STDERR_FILENO, "Usage: odysseus <config.dat>\n");
         return NOSTOS_EXIT_ARGS;

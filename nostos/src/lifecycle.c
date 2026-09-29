@@ -4,15 +4,41 @@
  *           SIGINT stays blocked for the entire process lifetime, so
  *           no signal handler ever runs anywhere in this codebase; the
  *           signal is only ever observed by reading a signalfd inside
- *           an ordinary blocking poll().
+ *           an ordinary blocking poll(). SIGPIPE is set to SIG_IGN, so
+ *           a broken output pipe becomes an EPIPE write error.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-26
+ * @Date: 2026-09-29
  */
 
 /* Own */
 #include "lifecycle.h"
 #include "io.h"
 #include "status.h"
+
+/***********************************************
+ * @Name: ignoreSigpipe
+ * @Def: Sets the SIGPIPE action to SIG_IGN with a checked sigaction()
+ *       call, so a write to a pipe with no reader returns -1 with errno
+ *       EPIPE instead of terminating the process. No handler function
+ *       is installed.
+ * @Arg: None.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR if the action could not be
+ *       built or installed.
+ ***********************************************/
+int ignoreSigpipe(void) {
+    struct sigaction stAction;
+
+    memset(&stAction, 0, sizeof(stAction));
+    stAction.sa_handler = SIG_IGN;
+    stAction.sa_flags = 0;
+    if (0 != sigemptyset(&stAction.sa_mask)) {
+        return NOSTOS_ERROR;
+    }
+    if (0 != sigaction(SIGPIPE, &stAction, NULL)) {
+        return NOSTOS_ERROR;
+    }
+    return NOSTOS_OK;
+}
 
 /***********************************************
  * @Name: blockSigint

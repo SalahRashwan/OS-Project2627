@@ -7,10 +7,12 @@
 #                            (rebuilds tests/bin/loader_check first)
 #             make faults    allocation/write fault-injection suite
 #             make memcheck  Valgrind suite (SIGINT, EOF, failures)
+#             make pipes     real broken-pipe suite (SIGPIPE), run once
+#                            plainly and once under Valgrind
 #             make check     all of the above
 #             make package GROUP=<n>  builds G<n>_F1.tar
 # @Author: Salah Ahmed Salaheldin Adly Rashwan
-# @Date: 2026-09-26
+# @Date: 2026-09-29
 
 CC = gcc
 CPPFLAGS = -D_GNU_SOURCE -Iinclude -Ilib
@@ -48,7 +50,7 @@ FAULT_WRAP = -Wl,--wrap=malloc,--wrap=realloc,--wrap=vasprintf,--wrap=write
 FAULT_OBJ = $(BUILD_DIR)/fault_inject.o
 FAULT_BINS = $(TEST_BIN)/odysseus-fault $(TEST_BIN)/ithaca-fault $(TEST_BIN)/island-fault
 
-.PHONY: all clean test faults memcheck check style package
+.PHONY: all clean test faults memcheck pipes check style package
 
 # Default target: build all three required executables.
 all: odysseus ithaca island
@@ -92,7 +94,7 @@ $(TEST_BIN)/island-fault: $(ISLAND_OBJS) $(FAULT_OBJ) | $(TEST_BIN)
 # touches the supplied lib/sphragis.o or any fixture data.
 clean:
 	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.d odysseus ithaca island
-	rm -rf $(TEST_BIN) $(TEST_DIR)/valgrind-logs $(TEST_DIR)/fault-logs
+	rm -rf $(TEST_BIN) $(TEST_DIR)/valgrind-logs $(TEST_DIR)/fault-logs $(TEST_DIR)/pipe-logs
 
 style:
 	python3 $(TEST_DIR)/style_check.py
@@ -106,7 +108,11 @@ faults: $(FAULT_BINS)
 memcheck: all
 	./$(TEST_DIR)/run_memcheck.sh
 
-check: test faults memcheck
+pipes: all
+	python3 $(TEST_DIR)/pipe_tests.py
+	python3 $(TEST_DIR)/pipe_tests.py --valgrind
+
+check: test faults memcheck pipes
 
 # Builds G<GROUP>_F1.tar with a top-level directory of the same name.
 # GROUP must be the real group number; it is never guessed.

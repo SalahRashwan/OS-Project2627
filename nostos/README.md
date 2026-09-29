@@ -91,7 +91,9 @@ make test      # style check + functional tests (commands, EOF, exit statuses,
 make faults    # makes every allocation and every screen write fail, one at a time,
                # under Valgrind (FAULT_VALGRIND=0 runs it without Valgrind, faster)
 make memcheck  # Valgrind on CTRL+C, EOF and initialization-error runs
-make check     # all three
+make pipes     # stdout/stderr connected to pipes with no reader, run plainly
+               # and under Valgrind
+make check     # all of the above
 ```
 
 Test-only files, never linked into the three programs:
@@ -103,11 +105,19 @@ Test-only files, never linked into the three programs:
 - `tests/style_check.py`: checks the style-guide rules that can be checked
   automatically.
 - `tests/pty_ctrl_c.py`: sends a real terminal CTRL+C to each program.
+- `tests/pipe_tests.py`: runs each program with its stdout and/or stderr on a pipe
+  whose reader is closed, and checks it exits with an error status instead of being
+  killed by SIGPIPE.
 
 ## Error handling
 
 Every allocation, read and write is checked. On an error the program prints a message
 on stderr, frees everything it owns and exits with status 2.
+
+Each program sets SIGPIPE to be ignored as the very first step of `main()`. Without
+that, writing to a pipe whose reader is gone (for example `./ithaca ... | head -1`
+after `head` exits) kills the process before it can clean up. With SIGPIPE ignored the
+write returns `EPIPE`, which goes through the normal write-error path above.
 
 ## Not included in Phase 1
 

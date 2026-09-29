@@ -8,16 +8,35 @@
  *           through a signalfd descriptor inside an ordinary blocking
  *           poll(), and consume it without ever running signal-handler
  *           code (there is no handler at all). See the UNIX book
- *           section 12.6.
+ *           section 12.6. Also sets SIGPIPE to be ignored, so a write
+ *           to a pipe with no reader fails with EPIPE and goes through
+ *           the normal write-error path instead of killing the process.
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-21
+ * @Date: 2026-09-29
  */
 
 /* System Includes */
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/signalfd.h>
+
+/* Fixed stderr diagnostic used when SIGPIPE cannot be ignored. */
+#define ERROR_SIGPIPE_SETUP "Error: could not set up SIGPIPE handling.\n"
+
+/***********************************************
+ * @Name: ignoreSigpipe
+ * @Def: Sets the SIGPIPE action to SIG_IGN with a checked sigaction()
+ *       call. Afterwards a write to a pipe with no reader returns -1
+ *       with errno EPIPE, which writeAll() reports as a normal write
+ *       failure. No handler function is installed. Must be the first
+ *       thing main() does, before any stdout or stderr write.
+ * @Arg: None.
+ * @Ret: NOSTOS_OK on success, NOSTOS_ERROR if the action could not be
+ *       built or installed.
+ ***********************************************/
+int ignoreSigpipe(void);
 
 /***********************************************
  * @Name: blockSigint

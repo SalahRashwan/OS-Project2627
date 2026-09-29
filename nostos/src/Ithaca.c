@@ -7,7 +7,7 @@
  *           at which point it releases every owned resource and
  *           exits. Ithaca has no interactive terminal (P p.17).
  * @Author: Salah Ahmed Salaheldin Adly Rashwan
- * @Date: 2026-09-26
+ * @Date: 2026-09-29
  */
 
 #include "Ithaca.h"
@@ -97,19 +97,25 @@ static int runIthacaLifecycle(int nSigFd, tIthacaConfig *pstConfig, tVoyageList 
 
 /***********************************************
  * @Name: main
- * @Def: Entry point. Validates the CLI argument count, initializes,
- *       runs the lifecycle, and returns the exit status
+ * @Def: Entry point. Ignores SIGPIPE before any write (so even the
+ *       usage message cannot kill the process), validates the CLI
+ *       argument count, initializes, runs the lifecycle, and returns
+ *       the exit status.
  * @Arg: In: argc = argument count.
  *       In: argv[1] = config.dat path, argv[2] = voyages.dat path.
  * @Ret: NOSTOS_EXIT_OK after a clean CTRL+C shutdown, NOSTOS_EXIT_ARGS on
- *       a wrong argument count, NOSTOS_EXIT_IO on any initialization,
- *       I/O, or allocation failure.
+ *       a wrong argument count, NOSTOS_EXIT_IO on a SIGPIPE setup
+ *       failure or on any initialization, I/O, or allocation failure.
  ***********************************************/
 int main(int argc, char *argv[]) {
     int nSigFd = -1;
     tIthacaConfig stConfig;
     tVoyageList stVoyages;
 
+    if (NOSTOS_OK != ignoreSigpipe()) {
+        (void) writeString(STDERR_FILENO, ERROR_SIGPIPE_SETUP);
+        return NOSTOS_EXIT_IO;
+    }
     if (3 != argc) {
         (void) writeString(STDERR_FILENO, "Usage: ithaca <config.dat> <voyages.dat>\n");
         return NOSTOS_EXIT_ARGS;

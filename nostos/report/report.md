@@ -98,6 +98,16 @@ failure halfway through loading.
   every allocation and every screen write fail, one at a time, and runs each case under
   Valgrind. We also went through the style guide again: system includes moved into
   the headers, and every function got its full header comment.
+- A second review found one more error path: when stdout (or stderr) was a pipe whose
+  reader had already closed, the first write raised SIGPIPE and the process died
+  without cleaning up, because SIGPIPE's default action terminates the process. Our
+  fault tests had not caught it: they made `write()` return an error, but a real
+  broken pipe sends the signal before `write()` returns. Each program now sets SIGPIPE
+  to `SIG_IGN` with `sigaction()` as the first step of `main()`, before any message is
+  written, so the write returns `EPIPE` and the normal error handling runs (message on
+  stderr if it still works, cleanup, exit 2; exit 1 is kept for wrong arguments). We
+  added `tests/pipe_tests.py`, which uses real pipes with the reader closed, both
+  before start-up and after the programs are ready, and also runs under Valgrind.
 
 ## 6. Block diagram
 
@@ -109,7 +119,7 @@ Three separate executables. In Phase 1 there are no connections between them.
                 +----------------+
                 | config.c/.h    |  loadOdysseusConfig / destroyOdysseusConfig
                 | commands.c/.h  |  parseCommand (syntax only, no I/O)
-                | lifecycle.c/.h |  blockSigint / createSigintFd / consumeSignal
+                | lifecycle.c/.h |  ignoreSigpipe / blockSigint / createSigintFd / consumeSignal
                 | text.c/.h      |  line buffer, tokenizer, number parsing
                 | io.c/.h        |  writeAll / writeString / writeFormatted / safeRead
                 +----------------+
