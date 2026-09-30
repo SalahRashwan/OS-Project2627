@@ -6,7 +6,7 @@
  * @Purpose: Loader/destructor for an island's binary stock.db file, and
  *           a safe display-copy helper for its fixed, not necessarily
  *           NUL-terminated 100-byte name field.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos 
  * @Date: 2026-09-21
  */
 

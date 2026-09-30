@@ -6,7 +6,7 @@
  *           readiness, then blocks (no busy waiting) until CTRL+C,
  *           at which point it releases every owned resource and
  *           exits. Ithaca has no interactive terminal (P p.17).
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos
  * @Date: 2026-09-29
  */
 

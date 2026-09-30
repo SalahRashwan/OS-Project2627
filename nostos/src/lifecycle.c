@@ -6,7 +6,7 @@
  *           signal is only ever observed by reading a signalfd inside
  *           an ordinary blocking poll(). SIGPIPE is set to SIG_IGN, so
  *           a broken output pipe becomes an EPIPE write error.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos  
  * @Date: 2026-09-29
  */
 

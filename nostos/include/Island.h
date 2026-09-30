@@ -5,7 +5,7 @@
  * @File: Island.h
  * @Purpose: Entry-point header for ./island <config.dat> <stock.db>.
  *           One executable represents any island by configuration.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author:  Daros Aragao Santos 
  * @Date: 2026-09-21
  */
 

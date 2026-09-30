@@ -11,7 +11,7 @@
  *           section 12.6. Also sets SIGPIPE to be ignored, so a write
  *           to a pipe with no reader fails with EPIPE and goes through
  *           the normal write-error path instead of killing the process.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos
  * @Date: 2026-09-29
  */
 

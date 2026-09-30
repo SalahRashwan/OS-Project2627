@@ -6,7 +6,7 @@
  *           then rebuilds an independently owned valid route list with
  *           each survivor's original IP/port restored. Never guesses,
  *           hardcodes, or bypasses the real library's decision.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos 
  * @Date: 2026-09-26
  */
 

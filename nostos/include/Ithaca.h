@@ -7,7 +7,7 @@
  *           Pulls in every system and project header Ithaca.c needs,
  *           so the source file itself includes only this header, per
  *           the style guide's "own includes only" convention.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos
  * @Date: 2026-09-21
  */
 

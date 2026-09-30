@@ -4,7 +4,7 @@
  *           Records are decoded field-by-field from raw bytes rather
  *           than read as a native struct, so no padding/alignment
  *           assumption about the compiler's struct layout is needed.
- * @Author: Salah Ahmed Salaheldin Adly Rashwan
+ * @Author: Daros Aragao Santos 
  * @Date: 2026-09-26
  */
 
